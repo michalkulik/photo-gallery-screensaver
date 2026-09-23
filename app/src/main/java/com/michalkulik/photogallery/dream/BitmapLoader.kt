@@ -86,7 +86,11 @@ object BitmapLoader {
         val name = photo.cacheKey ?: photo.uri.hashCode().toUInt().toString(16)
         val directory = File(context.cacheDir, REMOTE_DIR)
         val target = File(directory, name)
-        if (target.length() > 0) return target
+        if (target.length() > 0) {
+            // Touch it so the eviction below keeps what is actually being played.
+            target.setLastModified(System.currentTimeMillis())
+            return target
+        }
 
         val download = File(directory, "$name.download")
         val ok = Http.download(photo.uri, bearer = null, destination = download, insecure = photo.allowInsecureTls)
@@ -108,7 +112,28 @@ object BitmapLoader {
             return null
         }
         Logs.d("Remote photo $name: $downloadedSize bytes downloaded, ${target.length()} bytes ready")
+        trimCache(directory)
         return target
+    }
+
+    /**
+     * Keeps the download cache inside a size budget.
+     *
+     * The NAS serves originals, so a large library would otherwise fill the device: a few
+     * thousand photos at a couple of megabytes each is tens of gigabytes. Least recently used
+     * files are dropped first, and playing a photo counts as a use.
+     */
+    private fun trimCache(directory: File) {
+        val files = directory.listFiles()?.filter { it.isFile } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= CACHE_LIMIT_BYTES) return
+
+        files.sortedBy { it.lastModified() }.forEach { file ->
+            if (total <= CACHE_LIMIT_BYTES) return
+            val size = file.length()
+            if (file.delete()) total -= size
+        }
+        Logs.d("Trimmed the remote photo cache to $total bytes")
     }
 
     /** A ZIP local file header, which is how Synology wraps downloaded media. */
@@ -175,4 +200,10 @@ object BitmapLoader {
 
     /** Sub-directory of the app cache holding downloaded NAS photos. */
     private const val REMOTE_DIR = "remote"
+
+    /**
+     * Budget for the download cache. Synology serves originals, so without a cap a few thousand
+     * photos would consume tens of gigabytes on the device.
+     */
+    private const val CACHE_LIMIT_BYTES = 512L * 1024 * 1024
 }
