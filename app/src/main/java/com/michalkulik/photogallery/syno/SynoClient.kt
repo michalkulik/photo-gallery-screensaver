@@ -195,7 +195,11 @@ class SynoClient {
      * One page of a listing.
      *
      * Everything goes through `SYNO.Foto.Browse.Item`:
-     * an album is selected with the `id` parameter, and leaving it out lists the whole library.
+     * an album is selected with the `album_id` parameter, and leaving it out lists the whole
+     * library.
+     *
+     * `album_id` rather than `id` matters: DSM accepts `id` but ignores it, so an album listing
+     * would silently return the entire library.
      * `SYNO.Foto.Browse.Timeline` is not used here on purpose - its only method is `get`, which
      * returns date sections rather than photos.
      */
@@ -215,7 +219,7 @@ class SynoClient {
         // "session expired" but actually names the offending parameter in the body.
         params["additional"] = """["thumbnail"]"""
         if (albumId != ALL_PHOTOS_ID) {
-            params["id"] = albumId.toString()
+            params["album_id"] = albumId.toString()
         }
         return call(config, session, "SYNO.Foto.Browse.Item", 6, "list", params)
     }

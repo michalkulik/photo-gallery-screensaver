@@ -166,7 +166,12 @@ class SynoPhotos:
         return [item.id for item in self.album_items(album_id)]
 
     def album_items(self, album_id: int) -> list[Item]:
-        """Every item currently in the album."""
+        """Every item currently in the album.
+
+        The album is selected with ``album_id``. Passing ``id`` instead is accepted by DSM but
+        ignored, which silently returns the whole library - and then a "remove what is stale"
+        step would try to remove thousands of photos that were never in the album.
+        """
         items: list[Item] = []
         offset = 0
         for _ in range(MAX_PAGES):
@@ -178,7 +183,7 @@ class SynoPhotos:
                     "sort_by": "takentime",
                     "sort_direction": "desc",
                     "additional": json.dumps(["thumbnail"]),
-                    "id": album_id,
+                    "album_id": album_id,
                 },
             )
             batch = _parse_items(data)
@@ -195,6 +200,7 @@ class SynoPhotos:
         self._api(
             "SYNO.Foto.Browse.NormalAlbum", 4, "add_item",
             {"id": album_id, "item": json.dumps(item_ids)},
+            post=True,
         )
 
     def remove_from_album(self, album_id: int, item_ids: list[int]) -> None:
@@ -204,6 +210,7 @@ class SynoPhotos:
         self._api(
             "SYNO.Foto.Browse.NormalAlbum", 4, "delete_item",
             {"id": album_id, "item": json.dumps(item_ids)},
+            post=True,
         )
 
     # --- Photos ----------------------------------------------------------------------------
@@ -245,25 +252,32 @@ class SynoPhotos:
 
     # --- HTTP ------------------------------------------------------------------------------
 
-    def _api(self, api: str, version: int, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _api(self, api: str, version: int, method: str, params: dict[str, Any],
+             post: bool = False) -> dict[str, Any]:
         body = {"api": api, "version": str(version), "method": method}
         for key, value in params.items():
             body[key] = value if isinstance(value, str) else json.dumps(value)
         try:
-            return self._get("entry.cgi", body)
+            return self._call("entry.cgi", body, post=post)
         except SynoError as error:
             # Naming the API matters: a bare code does not say which call failed.
             raise SynoError(f"{api}.{method}: {error}", error.code) from error
 
     def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        return self._call(path, params, post=False)
+
+    def _call(self, path: str, params: dict[str, Any], post: bool) -> dict[str, Any]:
         if self.sid:
             params = {**params, "_sid": self.sid}
-        return self._call_raw(path, params)
-
-    def _call_raw(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
-        response = self._client.get(f"{self.base_url}/webapi/{path}", params=params)
+        url = f"{self.base_url}/webapi/{path}"
+        # Mutations are sent as a POST body: an album can hold thousands of items, and the id
+        # list does not fit in a query string.
+        if post:
+            response = self._client.post(url, data=params)
+        else:
+            response = self._client.get(url, params=params)
         if response.status_code != 200:
-            raise SynoError(f"HTTP {response.status_code} from {self.base_url}/webapi/{path}")
+            raise SynoError(f"HTTP {response.status_code} from {url}")
         try:
             payload = response.json()
         except ValueError as error:
@@ -282,6 +296,9 @@ class SynoPhotos:
         data = payload.get("data")
         return data if isinstance(data, dict) else {}
 
+    def _call_raw(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        return self._call(path, params, post=False)
+
 
 def _parse_items(data: dict[str, Any]) -> list[Item]:
     result: list[Item] = []
@@ -294,9 +311,28 @@ def _parse_items(data: dict[str, Any]) -> list[Item]:
             id=int(item_id),
             filename=thumbnail.get("original_name") or f"item-{item_id}",
             taken_at=int(raw.get("time") or 0),
-            is_video=int(raw.get("type") or 0) != 0,
+            is_video=_is_video(raw.get("type")),
         ))
     return result
+
+
+def _is_video(raw_type: Any) -> bool:
+    """Reads the item type, which is a string in the shared space and a number elsewhere.
+
+    Both representations are accepted, including a number arriving as a string, because the two
+    spaces disagree and a wrong answer would silently drop every video from the selection.
+    """
+    if isinstance(raw_type, str):
+        text = raw_type.strip().lower()
+        if not text:
+            return False
+        if text.lstrip("-").isdigit():
+            return int(text) != 0
+        return text in {"video", "live_video", "live"}
+    try:
+        return int(raw_type or 0) != 0
+    except (TypeError, ValueError):
+        return False
 
 
 def describe_error(code: int) -> str:

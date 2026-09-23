@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import random
 import sqlite3
+import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Iterable, Optional
@@ -43,99 +44,123 @@ class Selection:
 
 
 class Store:
-    """SQLite record of used photos and past runs."""
+    """SQLite record of used photos and past runs.
+
+    The connection is shared across threads on purpose: a run executes in a worker thread while
+    the web UI keeps serving status requests. SQLite forbids that by default, so the connection is
+    opened with ``check_same_thread=False`` and every access is serialised through a lock.
+    """
 
     def __init__(self, path: str) -> None:
-        self._connection = sqlite3.connect(path)
+        self._lock = threading.RLock()
+        self._connection = sqlite3.connect(path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
+        # WAL lets a reader (the status page) proceed while a run is writing.
+        self._connection.execute("PRAGMA journal_mode=WAL")
         self._create_schema()
 
     def _create_schema(self) -> None:
-        self._connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS used_items (
-                item_id   INTEGER PRIMARY KEY,
-                filename  TEXT,
-                taken_at  INTEGER,
-                used_on   TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS used_items_used_on ON used_items (used_on);
+        with self._lock:
+            self._connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS used_items (
+                    item_id   INTEGER PRIMARY KEY,
+                    filename  TEXT,
+                    taken_at  INTEGER,
+                    used_on   TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS used_items_used_on ON used_items (used_on);
 
-            CREATE TABLE IF NOT EXISTS runs (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                started_at  TEXT NOT NULL,
-                finished_at TEXT,
-                status      TEXT NOT NULL,
-                selected    INTEGER NOT NULL DEFAULT 0,
-                removed     INTEGER NOT NULL DEFAULT 0,
-                window_days INTEGER NOT NULL DEFAULT 0,
-                message     TEXT
-            );
-            """
-        )
-        self._connection.commit()
+                CREATE TABLE IF NOT EXISTS runs (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at  TEXT NOT NULL,
+                    finished_at TEXT,
+                    status      TEXT NOT NULL,
+                    selected    INTEGER NOT NULL DEFAULT 0,
+                    removed     INTEGER NOT NULL DEFAULT 0,
+                    window_days INTEGER NOT NULL DEFAULT 0,
+                    message     TEXT
+                );
+                """
+            )
+            self._connection.commit()
 
     # --- Used photos -----------------------------------------------------------------------
 
     def used_ids(self) -> set[int]:
-        rows = self._connection.execute("SELECT item_id FROM used_items").fetchall()
+        with self._lock:
+            rows = self._connection.execute("SELECT item_id FROM used_items").fetchall()
         return {int(row["item_id"]) for row in rows}
 
     def mark_used(self, candidates: Iterable[Candidate], used_on: date) -> None:
-        self._connection.executemany(
-            "INSERT OR REPLACE INTO used_items (item_id, filename, taken_at, used_on) "
-            "VALUES (?, ?, ?, ?)",
-            [
-                (c.item_id, c.filename, int(datetime.combine(c.taken_on, datetime.min.time()).timestamp()), used_on.isoformat())
-                for c in candidates
-            ],
-        )
-        self._connection.commit()
+        rows = [
+            (c.item_id, c.filename,
+             int(datetime.combine(c.taken_on, datetime.min.time()).timestamp()),
+             used_on.isoformat())
+            for c in candidates
+        ]
+        with self._lock:
+            self._connection.executemany(
+                "INSERT OR REPLACE INTO used_items (item_id, filename, taken_at, used_on) "
+                "VALUES (?, ?, ?, ?)",
+                rows,
+            )
+            self._connection.commit()
 
     def forget_all(self) -> int:
         """Clears the used-photo history, letting every photo be picked again."""
-        removed = self._connection.execute("SELECT COUNT(*) AS n FROM used_items").fetchone()["n"]
-        self._connection.execute("DELETE FROM used_items")
-        self._connection.commit()
+        with self._lock:
+            removed = self._connection.execute(
+                "SELECT COUNT(*) AS n FROM used_items"
+            ).fetchone()["n"]
+            self._connection.execute("DELETE FROM used_items")
+            self._connection.commit()
         return int(removed)
 
     def used_count(self) -> int:
-        return int(self._connection.execute("SELECT COUNT(*) AS n FROM used_items").fetchone()["n"])
+        with self._lock:
+            row = self._connection.execute("SELECT COUNT(*) AS n FROM used_items").fetchone()
+        return int(row["n"])
 
     # --- Runs ------------------------------------------------------------------------------
 
     def start_run(self) -> int:
-        cursor = self._connection.execute(
-            "INSERT INTO runs (started_at, status) VALUES (?, ?)",
-            (datetime.now().astimezone().isoformat(timespec="seconds"), "running"),
-        )
-        self._connection.commit()
-        return int(cursor.lastrowid)
+        with self._lock:
+            cursor = self._connection.execute(
+                "INSERT INTO runs (started_at, status) VALUES (?, ?)",
+                (datetime.now().astimezone().isoformat(timespec="seconds"), "running"),
+            )
+            self._connection.commit()
+            return int(cursor.lastrowid)
 
     def finish_run(self, run_id: int, status: str, selected: int, removed: int,
                    window_days: int, message: str = "") -> None:
-        self._connection.execute(
-            "UPDATE runs SET finished_at = ?, status = ?, selected = ?, removed = ?, "
-            "window_days = ?, message = ? WHERE id = ?",
-            (datetime.now().astimezone().isoformat(timespec="seconds"), status, selected,
-             removed, window_days, message, run_id),
-        )
-        self._connection.commit()
+        with self._lock:
+            self._connection.execute(
+                "UPDATE runs SET finished_at = ?, status = ?, selected = ?, removed = ?, "
+                "window_days = ?, message = ? WHERE id = ?",
+                (datetime.now().astimezone().isoformat(timespec="seconds"), status, selected,
+                 removed, window_days, message, run_id),
+            )
+            self._connection.commit()
 
     def last_runs(self, limit: int = 10) -> list[dict[str, object]]:
-        rows = self._connection.execute(
-            "SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
         return [dict(row) for row in rows]
 
     def last_success(self) -> Optional[dict[str, object]]:
-        row = self._connection.execute(
-            "SELECT * FROM runs WHERE status = 'ok' ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM runs WHERE status = 'ok' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
         return dict(row) if row else None
 
     def close(self) -> None:
-        self._connection.close()
+        with self._lock:
+            self._connection.close()
 
 
 def select_daily(

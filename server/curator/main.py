@@ -119,6 +119,11 @@ def run_curation(config: dict[str, Any]) -> dict[str, Any]:
         album = client.find_album(album_name)
         log.info("album %r id=%s shared=%s holds %s items",
                  album.name, album.id, album.shared, album.item_count)
+        # Logged because whether an album lives in the shared or the personal space decides
+        # which space the photos must be read from.
+        for candidate in client.albums():
+            log.info("  album %-32s id=%-6s shared=%-5s items=%s",
+                     candidate.name, candidate.id, candidate.shared, candidate.item_count)
 
         used = store().used_ids()
         log.info("%s photos have been used before", len(used))
@@ -157,19 +162,22 @@ def run_curation(config: dict[str, Any]) -> dict[str, Any]:
             return {"selected": len(selected_ids), "removed": 0, "window_days": window,
                     "dry_run": True}
 
-        # Clear the album, then fill it with the new selection. The photos themselves are only
-        # removed from the album, never deleted.
+        # Add first, then remove. If adding fails the album is left exactly as it was; the other
+        # order would empty it and leave nothing behind. During the swap the album briefly holds
+        # both sets, which is harmless.
         current = client.album_item_ids(album.id)
-        client.remove_from_album(album.id, current)
-        log.info("removed %s items from the album", len(current))
-
+        log.info("album currently holds %s items", len(current))
         client.add_to_album(album.id, selected_ids)
         log.info("added %s items to the album", len(selected_ids))
 
+        stale = [item_id for item_id in current if item_id not in set(selected_ids)]
+        client.remove_from_album(album.id, stale)
+        log.info("removed %s items that are no longer part of the selection", len(stale))
+
         store().mark_used(selection.chosen, date.today())
-        store().finish_run(run_id, "ok", len(selected_ids), len(current), window)
+        store().finish_run(run_id, "ok", len(selected_ids), len(stale), window)
         log.info("run %s finished", run_id)
-        return {"selected": len(selected_ids), "removed": len(current), "window_days": window}
+        return {"selected": len(selected_ids), "removed": len(stale), "window_days": window}
 
     except TwoFactorRequired as error:
         store().finish_run(run_id, "error", 0, 0, 0, "two-factor code required")
@@ -178,6 +186,12 @@ def run_curation(config: dict[str, Any]) -> dict[str, Any]:
     except SynoError as error:
         store().finish_run(run_id, "error", 0, 0, 0, str(error))
         log.error("run %s failed: %s", run_id, error)
+        raise
+    except Exception as error:
+        # Anything unexpected must still close the run row, otherwise it stays "running" and
+        # the history becomes misleading.
+        store().finish_run(run_id, "error", 0, 0, 0, f"{type(error).__name__}: {error}")
+        log.exception("run %s failed unexpectedly", run_id)
         raise
     finally:
         client.close()
@@ -267,6 +281,10 @@ async def run_now() -> JSONResponse:
         )
     except SynoError as error:
         return JSONResponse({"error": str(error)}, status_code=502)
+    except Exception as error:
+        # A bare 500 tells the user nothing, and this endpoint is how they test the setup.
+        log.exception("run failed unexpectedly")
+        return JSONResponse({"error": f"{type(error).__name__}: {error}"}, status_code=500)
 
 
 @app.post("/api/login")
