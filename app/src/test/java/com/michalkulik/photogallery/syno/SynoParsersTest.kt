@@ -37,6 +37,38 @@ class SynoParsersTest {
     }
 
     @Test
+    fun `detects the one-time-password challenge instead of treating it as a failure`() {
+        // A 2FA account answers the first sign-in with 403. Reading that as a plain error is
+        // what stopped the setup screen from ever connecting.
+        val challenge = """{"error":{"code":403},"success":false}"""
+
+        assertTrue(SynoParsers.requiresTwoFactor(SynoParsers.errorCode(challenge)))
+        assertEquals(403, SynoParsers.errorCode(challenge))
+    }
+
+    @Test
+    fun `does not mistake other failures for the two-factor challenge`() {
+        val wrongPassword = """{"error":{"code":400},"success":false}"""
+        val blocked = """{"error":{"code":407},"success":false}"""
+        val ok = """{"success":true,"data":{"sid":"abc"}}"""
+
+        assertFalse(SynoParsers.requiresTwoFactor(SynoParsers.errorCode(wrongPassword)))
+        assertFalse(SynoParsers.requiresTwoFactor(SynoParsers.errorCode(blocked)))
+        // A successful response has no error code at all.
+        assertNull(SynoParsers.errorCode(ok))
+        assertFalse(SynoParsers.requiresTwoFactor(SynoParsers.errorCode(ok)))
+    }
+
+    @Test
+    fun `reads the remembered device token from a login response`() {
+        val json = """{"success":true,"data":{"sid":"abc","did":"device-token-123"}}"""
+        val data = SynoParsers.envelope(json)
+
+        assertEquals("device-token-123", SynoParsers.parseDeviceId(data))
+        assertNull(SynoParsers.parseDeviceId(SynoParsers.envelope("""{"success":true,"data":{"sid":"a"}}""")))
+    }
+
+    @Test
     fun `rejects a body that is not json at all`() {
         val error = runCatching { SynoParsers.envelope("<html>403</html>") }.exceptionOrNull()
 

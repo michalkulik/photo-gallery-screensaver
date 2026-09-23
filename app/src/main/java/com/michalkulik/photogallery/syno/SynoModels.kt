@@ -86,6 +86,23 @@ object SynoParsers {
     }
 
     /**
+     * The error code of a failed envelope, or null when the response succeeded or is unreadable.
+     *
+     * Callers need the raw code because 403 does not mean "failed": it is the NAS asking for a
+     * one-time password.
+     */
+    fun errorCode(body: String): Int? {
+        val root = runCatching { JSONObject(body) }.getOrNull() ?: return null
+        if (root.optBoolean("success", false)) return null
+        return root.optJSONObject("error")?.optInt("code", -1) ?: -1
+    }
+
+    /** True when the code means the account needs a one-time password before signing in. */
+    fun requiresTwoFactor(code: Int?): Boolean = code == TWO_FACTOR_REQUIRED_CODE
+
+    private const val TWO_FACTOR_REQUIRED_CODE = 403
+
+    /**
      * Maps Synology's authentication error codes onto something a user can act on.
      *
      * The 40x range is the documented `SYNO.API.Auth` set; 407 in particular means the NAS's

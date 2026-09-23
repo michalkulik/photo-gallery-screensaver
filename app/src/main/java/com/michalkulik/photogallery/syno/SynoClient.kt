@@ -64,15 +64,11 @@ class SynoClient {
             throw SynoException("login_failed (${login.code}) ${login.body.take(200)}")
         }
 
-        val data = try {
-            SynoParsers.envelope(login.body)
-        } catch (error: SynoException) {
-            // 403 is the NAS asking for the one-time password, not a real failure.
-            if (error.message.orEmpty().contains("two_factor_required")) {
-                throw SynoTwoFactorRequired()
-            }
-            throw error
+        // 403 is the NAS asking for the one-time password, not a real failure.
+        if (SynoParsers.requiresTwoFactor(SynoParsers.errorCode(login.body))) {
+            throw SynoTwoFactorRequired()
         }
+        val data = SynoParsers.envelope(login.body)
 
         return SynoSession(
             sid = SynoParsers.parseSession(data),
