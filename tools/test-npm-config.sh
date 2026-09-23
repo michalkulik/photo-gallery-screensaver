@@ -71,6 +71,8 @@ check GET "/webapi/entry.cgi?api=SYNO.API.Encryption&version=1&method=getinfo" 2
 check GET "/webapi/entry.cgi?api=SYNO.API.Auth&version=7&method=login&account=x&passwd=y" 200 "login"
 check GET "/webapi/entry.cgi?api=SYNO.Foto.Browse.Album&version=5&method=list" 200 "album list"
 check GET "/webapi/entry.cgi?api=SYNO.Foto.Browse.Item&version=6&method=list" 200 "photo list"
+check GET "/webapi/entry.cgi?api=SYNO.Foto.Thumbnail&version=2&method=get" 200 "thumbnail (personal)"
+check GET "/webapi/entry.cgi?api=SYNO.FotoTeam.Thumbnail&version=2&method=get" 200 "thumbnail (shared)"
 check GET "/webapi/entry.cgi?api=SYNO.Foto.Download&version=2&method=download" 200 "photo bytes (personal)"
 check GET "/webapi/entry.cgi?api=SYNO.FotoTeam.Download&version=2&method=download" 200 "photo bytes (shared)"
 

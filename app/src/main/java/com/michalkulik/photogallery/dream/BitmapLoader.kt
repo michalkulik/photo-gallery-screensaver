@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import com.michalkulik.photogallery.data.Photo
 import com.michalkulik.photogallery.util.Http
@@ -15,7 +16,7 @@ import java.util.zip.ZipFile
 
 /**
  * Decodes photos downsampled to roughly the screen size, which keeps memory use flat no matter
- * how large the originals are. Also applies the EXIF orientation reported by MediaStore.
+ * how large the originals are. Also applies the EXIF orientation, which BitmapFactory ignores.
  */
 object BitmapLoader {
 
@@ -42,9 +43,35 @@ object BitmapLoader {
             return null
         }
 
-        val rotation = ((photo.orientation % 360) + 360) % 360
+        val rotation = rotationFor(context, photo)
         if (rotation == 0) return decoded
         return rotate(decoded, rotation) ?: decoded
+    }
+
+    /**
+     * Clockwise rotation that must be applied for the photo to appear upright.
+     *
+     * MediaStore reports this for photos already on the device. Anything else - a file fetched
+     * from the NAS, for instance - has to be read from the image itself, because BitmapFactory
+     * ignores the EXIF orientation tag and would otherwise draw every portrait photo on its
+     * side.
+     */
+    private fun rotationFor(context: Context, photo: Photo): Int {
+        val reported = ((photo.orientation % 360) + 360) % 360
+        if (reported != 0) return reported
+        return runCatching {
+            openStream(context, photo)?.use { stream ->
+                val exif = ExifInterface(stream)
+                when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                    ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                    ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                    else -> 0
+                }
+            } ?: 0
+        }.onFailure {
+            Logs.w("Cannot read the EXIF orientation of ${photo.cacheKey ?: photo.uri}", it)
+        }.getOrDefault(0)
     }
 
     /** Largest power-of-two sample size that still keeps the image at or above the target. */
@@ -92,10 +119,10 @@ object BitmapLoader {
             return target
         }
 
-        // The primary URL first, then the fallback. Synology serves shared and personal photos
-        // through different APIs, and the wrong one answers with a small JSON error rather than
-        // an image, so a wrong guess has to be recoverable rather than fatal.
-        val urls = listOfNotNull(photo.uri, photo.fallbackUri)
+        // The primary URL first, then the fallbacks. Synology serves thumbnails and originals
+        // through different APIs, and a rejected request answers with a small JSON error rather
+        // than an image, so a wrong guess has to be recoverable rather than fatal.
+        val urls = listOf(photo.uri) + photo.fallbackUris
         urls.forEachIndexed { index, url ->
             val attempt = File(directory, "$name.${index}.download")
             val ok = Http.download(url, bearer = null, destination = attempt,

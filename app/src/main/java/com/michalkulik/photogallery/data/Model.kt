@@ -54,10 +54,10 @@ data class Photo(
      */
     val allowInsecureTls: Boolean = false,
     /**
-     * A second URL to try when [uri] does not return an image.
+     * URLs to try, in order, when [uri] does not return an image.
      *
-     * Used for Synology photos: the shared and personal spaces have separate download APIs and
-     * neither serves the other's photos, so a wrong guess has to be recoverable.
+     * Used for Synology photos: the thumbnail API is preferred for its size, and the full-size
+     * download covers a NAS build whose thumbnails behave differently.
      */
-    val fallbackUri: String? = null,
+    val fallbackUris: List<String> = emptyList(),
 )

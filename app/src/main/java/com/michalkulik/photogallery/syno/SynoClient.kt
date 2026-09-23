@@ -227,47 +227,51 @@ class SynoClient {
     /**
      * Builds the URL that serves one image.
      *
-     * Synology has no dedicated thumbnail API: `SYNO.Foto.Download` takes a size and returns the
-     * bytes, so the screensaver asks for a TV-sized image rather than the original.
+     * Uses `Thumbnail` rather than `Download`: `Download` ignores its size parameter and always
+     * returns the original, which for a modern camera is 8-20 MB - far more than a TV needs.
+     * `Thumbnail` honours the size and is around fifteen times smaller at `xl`.
+     *
+     * The parameter shapes differ between the two APIs and are easy to get wrong:
+     * `Thumbnail` takes a plain `id` and a required `type`, while `Download` takes bracketed
+     * `unit_id`/`item_id`. DSM reports the offending parameter in the error body.
      */
     fun imageUrl(
         config: SynoConfig,
         session: SynoSession,
         item: SynoItem,
         size: String = SIZE_TV,
-    ): String = downloadUrl(config, session, item, size, sharedSpace = item.sharedSpace)
+    ): String {
+        val params = LinkedHashMap<String, String>()
+        params["id"] = item.id.toString()
+        params["type"] = THUMBNAIL_TYPE
+        params["size"] = size
+        item.cacheKey?.let { params["cache_key"] = it }
+        params["_sid"] = session.sid
+        // The two spaces have separate APIs and neither serves the other's photos.
+        val api = if (item.sharedSpace) "SYNO.FotoTeam.Thumbnail" else "SYNO.Foto.Thumbnail"
+        return url(config, api, 2, "get", params)
+    }
 
     /**
-     * The same image requested from the other space.
+     * Full-size downloads to fall back on, in order.
      *
-     * The two spaces have separate download APIs and neither serves the other's photos, so this
-     * is the fallback for the case where [SynoItem.sharedSpace] was read wrongly.
+     * `Download` always works, so it covers a NAS build whose `Thumbnail` behaves differently.
+     * Both spaces are offered because a wrongly detected space makes every request fail.
      */
-    fun alternativeImageUrl(
+    fun fallbackImageUrls(
         config: SynoConfig,
         session: SynoSession,
         item: SynoItem,
-        size: String = SIZE_TV,
-    ): String = downloadUrl(config, session, item, size, sharedSpace = !item.sharedSpace)
-
-    private fun downloadUrl(
-        config: SynoConfig,
-        session: SynoSession,
-        item: SynoItem,
-        size: String,
-        sharedSpace: Boolean,
-    ): String {
+    ): List<String> = listOf(item.sharedSpace, !item.sharedSpace).map { sharedSpace ->
         val params = LinkedHashMap<String, String>()
         params["unit_id"] = "[${item.id}]"
         params["item_id"] = "[${item.id}]"
-        params["size"] = size
+        params["size"] = SIZE_TV
         params["type"] = if (item.isVideo) "thumb" else "unit"
         item.cacheKey?.let { params["cache_key"] = it }
         params["_sid"] = session.sid
-        // Shared photos are served by the team API and personal photos by the plain one; using
-        // the wrong one answers error 117 rather than returning anything.
         val api = if (sharedSpace) "SYNO.FotoTeam.Download" else "SYNO.Foto.Download"
-        return url(config, api, 2, "download", params)
+        url(config, api, 2, "download", params)
     }
 
     /** Quick reachability probe used by the setup screen. */
@@ -373,10 +377,16 @@ class SynoClient {
         private const val ALBUM_LIMIT = 200
 
         /**
-         * Image size requested for the TV. `xl` is the largest pre-generated preview, which is
-         * plenty for 1080p and far cheaper than re-encoding the original.
+         * Image size requested for the TV.
+         *
+         * `xl` is the largest preview. Measured on the NAS: 520 KB against 7.9 MB for the
+         * original, and `m` is 47 KB - so this is a fifteen-fold saving with no visible loss on
+         * a television.
          */
         const val SIZE_TV = "xl"
+
+        /** `Thumbnail` requires a type, and `unit` is what it accepts for a photo. */
+        private const val THUMBNAIL_TYPE = "unit"
 
         /**
          * Name the NAS shows in its "remembered devices" list. Lets the user revoke this TV's

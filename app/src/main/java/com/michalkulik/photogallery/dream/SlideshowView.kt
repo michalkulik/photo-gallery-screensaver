@@ -1,5 +1,10 @@
 package com.michalkulik.photogallery.dream
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -53,6 +58,15 @@ class SlideshowView @JvmOverloads constructor(
 
     private var front: ImageView = layerA
     private var back: ImageView = layerB
+
+    /**
+     * The animation currently driving the visible photo.
+     *
+     * Tracked explicitly because `view.animate()` hands out one animator per view: starting a
+     * second animation on the same view silently cancels the first, which is what broke every
+     * other transition.
+     */
+    private var activeAnimator: Animator? = null
 
     private val clockHandler = Handler(Looper.getMainLooper())
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -185,6 +199,10 @@ class SlideshowView @JvmOverloads constructor(
         slideshowJob?.cancel()
         slideshowJob = null
         stopClock()
+        val running = activeAnimator
+        activeAnimator = null
+        running?.removeAllListeners()
+        running?.cancel()
         layerA.animate().cancel()
         layerB.animate().cancel()
         recycleLayer(layerA)
@@ -210,17 +228,38 @@ class SlideshowView @JvmOverloads constructor(
     private fun targetHeight(): Int = if (height > 0) height else FALLBACK_HEIGHT
 
     private fun show(bitmap: Bitmap, animate: Boolean) {
+        // Stop whatever is still running before touching the layers. `view.animate()` returns a
+        // single animator per view, so starting a second animation on the same view cancels the
+        // first - which is exactly what used to break every other transition.
+        val previous = activeAnimator
+        activeAnimator = null
+        previous?.removeAllListeners()
+        previous?.cancel()
+
         val incoming = back
         val outgoing = front
-        incoming.animate().cancel()
         Logs.d("Showing ${bitmap.width}x${bitmap.height} (animate=$animate)")
+
+        incoming.animate().cancel()
         incoming.setTag(R.id.slideshow_bitmap_tag, bitmap)
         incoming.setImageBitmap(bitmap)
         incoming.alpha = if (animate) 0f else 1f
         incoming.translationX = if (animate && settings.transition == Transition.SLIDE) width.toFloat() else 0f
         incoming.visibility = View.VISIBLE
+        // Reset the transform the previous use of this layer left behind. A stale scale is what
+        // made photos look zoomed the moment they appeared.
         incoming.scaleX = 1f
         incoming.scaleY = 1f
+
+        // The incoming layer must be drawn above the outgoing one. Child order is fixed, so
+        // without this the old photo hides the new one until it is recycled: the new photo's
+        // animation runs unseen and it only appears, already zoomed, once the old one is cleared.
+        incoming.bringToFront()
+        // The overlays belong above the photos, so raising a layer has to be followed by raising
+        // them again.
+        dimView.bringToFront()
+        clockView.bringToFront()
+        messageView.bringToFront()
 
         // The incoming layer becomes the front immediately; the outgoing one is cleared once
         // the transition is over so it never gets recycled mid-animation.
@@ -229,31 +268,74 @@ class SlideshowView @JvmOverloads constructor(
 
         if (!animate) {
             recycleLayer(outgoing)
-        } else {
-            val duration = settings.transitionMillis()
-            incoming.animate()
-                .alpha(1f)
-                .translationX(0f)
-                .setDuration(duration)
-                .withEndAction {
-                    outgoing.alpha = 0f
-                    recycleLayer(outgoing)
-                }
-                .start()
+            startKenBurns(incoming)
+            return
         }
+
+        val duration = settings.transitionMillis()
+        val fade = ObjectAnimator.ofFloat(incoming, View.ALPHA, 0f, 1f).setDuration(duration)
+        val slide = ObjectAnimator
+            .ofFloat(incoming, View.TRANSLATION_X, incoming.translationX, 0f)
+            .setDuration(duration)
+
+        val set = AnimatorSet()
+        set.playTogether(fade, slide)
 
         if (settings.kenBurns) {
+            // Played together with the fade rather than started afterwards: two separate
+            // animations on one view would cancel each other, leaving the photo invisible and
+            // the previous one still on screen.
             val grow = if (settings.fit == FitMode.COVER) KEN_BURNS_SCALE else KEN_BURNS_SCALE_CONTAIN
-            val motion = settings.intervalSeconds * 1000L + settings.transitionMillis()
-            incoming.animate().scaleX(grow).scaleY(grow).setStartDelay(0L).setDuration(motion).start()
+            val zoom = ObjectAnimator.ofPropertyValuesHolder(
+                incoming,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, grow),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, grow),
+            ).setDuration(settings.intervalSeconds * 1000L + duration)
+            set.playTogether(zoom)
         }
+
+        set.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                // A cancellation means the next photo is already taking over, so the layers
+                // must be left alone.
+                if (animation !== activeAnimator) return
+                recycleLayer(outgoing)
+            }
+        })
+
+        activeAnimator = set
+        set.start()
     }
 
+    /** Slow zoom that runs while a photo is on screen. */
+    private fun startKenBurns(layer: ImageView) {
+        if (!settings.kenBurns) return
+        val grow = if (settings.fit == FitMode.COVER) KEN_BURNS_SCALE else KEN_BURNS_SCALE_CONTAIN
+        val zoom = ObjectAnimator.ofPropertyValuesHolder(
+            layer,
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, grow),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, grow),
+        ).setDuration(settings.intervalSeconds * 1000L + settings.transitionMillis())
+        activeAnimator = zoom
+        zoom.start()
+    }
+
+    /**
+     * Frees a layer and returns it to a neutral state.
+     *
+     * Every property is reset, not just the drawable: the layer is reused for a later photo, and
+     * a leftover alpha, translation or scale would show up as a photo appearing faded, offset or
+     * already zoomed.
+     */
     private fun recycleLayer(layer: ImageView) {
         layer.animate().cancel()
         val bitmap = layer.getTag(R.id.slideshow_bitmap_tag) as? Bitmap
         layer.setTag(R.id.slideshow_bitmap_tag, null)
         layer.setImageDrawable(null)
+        layer.alpha = 1f
+        layer.translationX = 0f
+        layer.scaleX = 1f
+        layer.scaleY = 1f
         layer.visibility = View.INVISIBLE
         if (bitmap != null && !bitmap.isRecycled) {
             bitmap.recycle()
