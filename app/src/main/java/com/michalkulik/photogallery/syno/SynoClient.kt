@@ -1,12 +1,9 @@
 package com.michalkulik.photogallery.syno
 
-import android.util.Base64
 import com.michalkulik.photogallery.util.Http
+import com.michalkulik.photogallery.util.HttpResult
 import com.michalkulik.photogallery.util.Logs
-import java.security.KeyFactory
-import java.security.spec.X509EncodedKeySpec
 import java.net.URLEncoder
-import javax.crypto.Cipher
 
 /**
  * Client for the Synology Photos WebAPI.
@@ -35,12 +32,73 @@ class SynoClient {
         deviceId: String? = null,
         deviceName: String? = null,
     ): SynoSession {
-        val publicKey = fetchPublicKey(config)
-        val encrypted = encryptPassword(publicKey, config.password)
+        // DSM expects the password in the clear when HTTPS already protects it, and only wants
+        // the RSA-wrapped form on plain HTTP. Sending the wrapped form over HTTPS does not work:
+        // DSM compares the blob literally and answers 400, which is indistinguishable from a
+        // genuinely wrong password. Try the transport-appropriate form first and fall back to
+        // the other one, so this works whichever way a given DSM build behaves.
+        val plain = config.password
+        val wrapped = runCatching { SynoCrypto.encryptPassword(fetchPublicKey(config), plain) }
+            .onFailure { Logs.w("Cannot wrap the password with the NAS public key", it) }
+            .getOrNull()
 
+        val attempts = if (config.secure) {
+            listOfNotNull(plain, wrapped)
+        } else {
+            listOfNotNull(wrapped, plain)
+        }
+
+        var failure: String? = null
+        attempts.forEachIndexed { index, passwd ->
+            val result = attemptLogin(config, passwd, otpCode, deviceId, deviceName)
+            val errorCode = SynoParsers.errorCode(result.body)
+            // Logged without the password: which form was tried is what matters for diagnosis.
+            Logs.d(
+                "Synology login attempt ${index + 1}/${attempts.size} " +
+                    "wrapped=${passwd !== plain} account=${config.account} " +
+                    "passwordLength=${plain.length} otp=${!otpCode.isNullOrBlank()} " +
+                    "deviceId=${!deviceId.isNullOrBlank()} httpCode=${result.code} errorCode=$errorCode",
+            )
+
+            if (!result.isSuccess) {
+                failure = "login_failed (${result.code}) ${result.body.take(200)}"
+                return@forEachIndexed
+            }
+
+            // 403 is the NAS asking for the one-time password, not a real failure.
+            if (SynoParsers.requiresTwoFactor(errorCode)) {
+                throw SynoTwoFactorRequired()
+            }
+
+            if (errorCode == null) {
+                val data = SynoParsers.envelope(result.body)
+                return SynoSession(
+                    sid = SynoParsers.parseSession(data),
+                    apiVersions = fetchApiVersions(config),
+                    deviceId = SynoParsers.parseDeviceId(data),
+                )
+            }
+
+            failure = SynoParsers.describeError(errorCode) + " (code $errorCode)"
+            // Only a rejected password justifies trying the other form; anything else would
+            // just burn another sign-in attempt against Auto Block.
+            if (errorCode != WRONG_CREDENTIALS) return@forEachIndexed
+        }
+
+        throw SynoException(failure ?: "login_failed")
+    }
+
+    /** One sign-in request with the given `passwd` value. */
+    private fun attemptLogin(
+        config: SynoConfig,
+        passwd: String,
+        otpCode: String?,
+        deviceId: String?,
+        deviceName: String?,
+    ): HttpResult {
         val params = LinkedHashMap<String, String>()
         params["account"] = config.account
-        params["passwd"] = encrypted
+        params["passwd"] = passwd
         params["session"] = SESSION
         params["format"] = "sid"
         // Present in the reference client; DSM accepts sign-ins without them but including them
@@ -61,32 +119,9 @@ class SynoClient {
             params["device_name"] = deviceName
         }
 
-        val login = Http.getJson(
+        return Http.getJson(
             url(config, "SYNO.API.Auth", 7, "login", params),
             insecure = config.ignoreCertificate,
-        )
-        // Logged without the password itself: the length and the account are what actually
-        // matter when a NAS rejects a sign-in that the user believes is correct.
-        Logs.d(
-            "Synology login: account=${config.account} passwordLength=${config.password.length} " +
-                "encryptedLength=${encrypted.length} otp=${!otpCode.isNullOrBlank()} " +
-                "deviceId=${!deviceId.isNullOrBlank()} httpCode=${login.code} " +
-                "errorCode=${SynoParsers.errorCode(login.body)}",
-        )
-        if (!login.isSuccess) {
-            throw SynoException("login_failed (${login.code}) ${login.body.take(200)}")
-        }
-
-        // 403 is the NAS asking for the one-time password, not a real failure.
-        if (SynoParsers.requiresTwoFactor(SynoParsers.errorCode(login.body))) {
-            throw SynoTwoFactorRequired()
-        }
-        val data = SynoParsers.envelope(login.body)
-
-        return SynoSession(
-            sid = SynoParsers.parseSession(data),
-            apiVersions = fetchApiVersions(config),
-            deviceId = SynoParsers.parseDeviceId(data),
         )
     }
 
@@ -223,20 +258,6 @@ class SynoClient {
         SynoParsers.parseApiInfo(SynoParsers.envelope(result.body))
     }.onFailure { Logs.w("Cannot read the NAS API list", it) }.getOrDefault(emptyMap())
 
-    /**
-     * Encrypts the password with the NAS public key.
-     *
-     * Sending it in the clear would be a downgrade the NAS explicitly supports but the app should
-     * never use; RSA with PKCS#1 padding is what the WebAPI expects for `passwd`.
-     */
-    private fun encryptPassword(publicKeyBase64: String, password: String): String {
-        val keyBytes = Base64.decode(publicKeyBase64, Base64.DEFAULT)
-        val key = KeyFactory.getInstance("RSA").generatePublic(X509EncodedKeySpec(keyBytes))
-        val cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
-        cipher.init(Cipher.ENCRYPT_MODE, key)
-        return Base64.encodeToString(cipher.doFinal(password.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
-    }
-
     private fun base(config: SynoConfig) = config.baseUrl
 
     private fun url(
@@ -282,5 +303,8 @@ class SynoClient {
          * access later without affecting other clients.
          */
         const val DEVICE_NAME = "Photo Gallery Screensaver (TV)"
+
+        /** DSM's code for a rejected account/password pair. */
+        private const val WRONG_CREDENTIALS = 400
     }
 }
