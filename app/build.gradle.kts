@@ -35,8 +35,8 @@ android {
         applicationId = "com.michalkulik.photogallery"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "PHOTOS_SCOPE", "\"https://www.googleapis.com/auth/photospicker.mediaitems.readonly\"")
         buildConfigField("String", "PICKER_API_BASE", "\"https://photospicker.googleapis.com/v1\"")
