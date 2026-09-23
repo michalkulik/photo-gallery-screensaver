@@ -104,7 +104,7 @@
     <string name="player_ken_burns">Ken Burns motion</string>
     <string name="player_fit">Scaling</string>
     <string name="player_fit_contain">Fit whole photo</string>
-    <string name="player_fit_cover">Fill the screen</string>
+    <string name="player_fit_cover">Fill the screen (crops edges)</string>
     <string name="player_clock">Show clock</string>
     <string name="player_dim">Dim photos</string>
 

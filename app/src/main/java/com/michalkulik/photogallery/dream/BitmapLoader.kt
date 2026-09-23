@@ -86,6 +86,25 @@ object BitmapLoader {
         return sample
     }
 
+    /**
+     * A heavily reduced copy of [source], for the backdrop behind a fitted photo.
+     *
+     * It is deliberately tiny: the ImageView scales it up with bilinear filtering, which is what
+     * produces the soft look, and the GPU does that far more cheaply than blurring at full
+     * resolution would. Keeping only a few hundred pixels alive also means the backdrop costs
+     * almost no memory.
+     */
+    fun backdrop(source: Bitmap): Bitmap? = runCatching {
+        val width = backdropWidth(source.width)
+        if (width >= source.width) return@runCatching null
+        val height = (source.height.toFloat() * width / source.width).toInt().coerceAtLeast(1)
+        Bitmap.createScaledBitmap(source, width, height, true)
+    }.onFailure { Logs.w("Cannot build the backdrop", it) }.getOrNull()
+
+    /** Width of the backdrop copy; a pure function so the sizing can be tested. */
+    internal fun backdropWidth(sourceWidth: Int): Int =
+        if (sourceWidth <= BACKDROP_WIDTH) sourceWidth else BACKDROP_WIDTH
+
     private fun openStream(context: Context, photo: Photo): InputStream? = try {
         when {
             photo.uri.startsWith("content:") ->
@@ -274,4 +293,12 @@ object BitmapLoader {
      * photos would consume tens of gigabytes on the device.
      */
     private const val CACHE_LIMIT_BYTES = 512L * 1024 * 1024
+
+    /**
+     * Width of the backdrop copy.
+     *
+     * Small enough that scaling it up reads as a soft blur rather than a mosaic, large enough
+     * that it does not band. At 64 px a 1920 px screen magnifies it thirty times.
+     */
+    private const val BACKDROP_WIDTH = 64
 }

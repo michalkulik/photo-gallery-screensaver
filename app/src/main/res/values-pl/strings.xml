@@ -104,7 +104,7 @@
     <string name="player_ken_burns">Efekt Ken Burnsa</string>
     <string name="player_fit">Skalowanie</string>
     <string name="player_fit_contain">Całe zdjęcie</string>
-    <string name="player_fit_cover">Wypełnij ekran</string>
+    <string name="player_fit_cover">Wypełnij ekran (przycina brzegi)</string>
     <string name="player_clock">Pokaż zegar</string>
     <string name="player_dim">Przyciemnienie</string>
 

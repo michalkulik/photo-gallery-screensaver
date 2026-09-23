@@ -30,8 +30,23 @@ class SlideshowSettingsTest {
         assertEquals(Transition.SLIDE, SlideshowSettings.parseTransition("SLIDE"))
         assertEquals(Transition.FADE, SlideshowSettings.parseTransition(null))
 
+        assertEquals(FitMode.COVER, SlideshowSettings.parseFit("COVER"))
         assertEquals(FitMode.CONTAIN, SlideshowSettings.parseFit("CONTAIN"))
-        assertEquals(FitMode.COVER, SlideshowSettings.parseFit("nonsense"))
+    }
+
+    @Test
+    fun `an unset scaling mode fits the whole photo`() {
+        // This has to agree with the data class default. When it did not, a fresh install read
+        // back COVER and cropped a portrait photo to about 40% of its height, cutting off heads
+        // and feet while the setting on screen claimed otherwise.
+        assertEquals(FitMode.CONTAIN, SlideshowSettings.parseFit(null))
+        assertEquals(FitMode.CONTAIN, SlideshowSettings().fit)
+    }
+
+    @Test
+    fun `an unknown scaling mode does not silently crop`() {
+        // Fitting the whole photo is the safe fallback: cropping is the surprising behaviour.
+        assertEquals(FitMode.CONTAIN, SlideshowSettings.parseFit("something-else"))
     }
 
     @Test
@@ -41,7 +56,7 @@ class SlideshowSettingsTest {
         assertEquals(10, defaults.intervalSeconds)
         assertEquals(PlayOrder.SHUFFLE, defaults.order)
         assertEquals(Transition.FADE, defaults.transition)
-        assertEquals(FitMode.COVER, defaults.fit)
+        assertEquals(FitMode.CONTAIN, defaults.fit)
         assertEquals(true, defaults.kenBurns)
         assertEquals(false, defaults.showClock)
     }

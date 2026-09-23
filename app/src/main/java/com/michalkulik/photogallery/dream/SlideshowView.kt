@@ -45,6 +45,7 @@ class SlideshowView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
 
+    private val backdrop = ImageView(context)
     private val layerA = ImageView(context)
     private val layerB = ImageView(context)
     private val dimView = View(context)
@@ -58,6 +59,9 @@ class SlideshowView @JvmOverloads constructor(
 
     private var front: ImageView = layerA
     private var back: ImageView = layerB
+
+    /** A decoded photo together with the blurred copy used for the backdrop. */
+    private class Frame(val photo: Bitmap, val backdrop: Bitmap?)
 
     /**
      * The animation currently driving the visible photo.
@@ -79,6 +83,14 @@ class SlideshowView @JvmOverloads constructor(
 
     init {
         setBackgroundColor(Color.BLACK)
+        // Fills the screen behind a fitted photo, so a portrait picture is not flanked by two
+        // black bars. It holds a tiny blurred copy that the GPU scales up.
+        backdrop.scaleType = ImageView.ScaleType.CENTER_CROP
+        backdrop.alpha = BACKDROP_ALPHA
+        addView(
+            backdrop,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
         listOf(layerA, layerB).forEach { layer ->
             layer.scaleType = ImageView.ScaleType.CENTER_CROP
             layer.visibility = View.INVISIBLE
@@ -140,6 +152,7 @@ class SlideshowView @JvmOverloads constructor(
         messageView.visibility = View.VISIBLE
         layerA.visibility = View.INVISIBLE
         layerB.visibility = View.INVISIBLE
+        recycleBackdrop()
     }
 
     fun start() {
@@ -155,15 +168,15 @@ class SlideshowView @JvmOverloads constructor(
         if (settings.showClock) startClock()
         slideshowJob = scope.launch {
             var index = 0
-            var staged: Bitmap? = null
+            var staged: Frame? = null
             var firstShown = false
             var failed = 0
             try {
                 while (isActive) {
                     val photo = playlist[index % playlist.size]
-                    val bitmap = staged ?: decode(photo)
+                    val frame = staged ?: decode(photo)
                     staged = null
-                    if (bitmap == null) {
+                    if (frame == null) {
                         Logs.w("Cannot decode ${photo.uri}, skipping")
                         failed++
                         index++
@@ -174,12 +187,12 @@ class SlideshowView @JvmOverloads constructor(
                         continue
                     }
                     failed = 0
-                    show(bitmap, animate = firstShown)
+                    show(frame, animate = firstShown)
                     firstShown = true
 
                     val nextIndex = index + 1
                     val prefetch = async(Dispatchers.IO) {
-                        BitmapLoader.load(context, playlist[nextIndex % playlist.size], targetWidth(), targetHeight())
+                        loadFrame(playlist[nextIndex % playlist.size])
                     }
                     delay(settings.intervalSeconds * 1000L)
                     staged = withContext(Dispatchers.IO) { prefetch.await() }
@@ -207,10 +220,21 @@ class SlideshowView @JvmOverloads constructor(
         layerB.animate().cancel()
         recycleLayer(layerA)
         recycleLayer(layerB)
+        recycleBackdrop()
         front = layerA
         back = layerB
         layerA.visibility = View.INVISIBLE
         layerB.visibility = View.INVISIBLE
+    }
+
+    /** Frees the blurred backdrop bitmap. */
+    private fun recycleBackdrop() {
+        val bitmap = backdrop.getTag(R.id.slideshow_backdrop_tag) as? Bitmap
+        backdrop.setTag(R.id.slideshow_backdrop_tag, null)
+        backdrop.setImageDrawable(null)
+        if (bitmap != null && !bitmap.isRecycled) {
+            bitmap.recycle()
+        }
     }
 
     /** Releases everything; call from `onDetachedFromWindow`. */
@@ -219,15 +243,25 @@ class SlideshowView @JvmOverloads constructor(
         scope.cancel()
     }
 
-    private suspend fun decode(photo: Photo): Bitmap? = withContext(Dispatchers.IO) {
-        BitmapLoader.load(context, photo, targetWidth(), targetHeight())
+    private suspend fun decode(photo: Photo): Frame? = withContext(Dispatchers.IO) { loadFrame(photo) }
+
+    /**
+     * Decodes a photo and its backdrop.
+     *
+     * The backdrop is built here rather than while showing, because scaling a full-size bitmap
+     * down to a few dozen pixels would otherwise drop a frame during the transition.
+     */
+    private fun loadFrame(photo: Photo): Frame? {
+        val bitmap = BitmapLoader.load(context, photo, targetWidth(), targetHeight()) ?: return null
+        return Frame(bitmap, BitmapLoader.backdrop(bitmap))
     }
 
     private fun targetWidth(): Int = if (width > 0) width else FALLBACK_WIDTH
 
     private fun targetHeight(): Int = if (height > 0) height else FALLBACK_HEIGHT
 
-    private fun show(bitmap: Bitmap, animate: Boolean) {
+    private fun show(frame: Frame, animate: Boolean) {
+        val bitmap = frame.photo
         // Stop whatever is still running before touching the layers. `view.animate()` returns a
         // single animator per view, so starting a second animation on the same view cancels the
         // first - which is exactly what used to break every other transition.
@@ -250,6 +284,17 @@ class SlideshowView @JvmOverloads constructor(
         // made photos look zoomed the moment they appeared.
         incoming.scaleX = 1f
         incoming.scaleY = 1f
+
+        // The backdrop changes with the photo, and is swapped immediately rather than faded:
+        // it is the same picture, so a fade would only smear the edges of the real one.
+        val previousBackdrop = backdrop.getTag(R.id.slideshow_backdrop_tag) as? Bitmap
+        backdrop.setTag(R.id.slideshow_backdrop_tag, frame.backdrop)
+        backdrop.setImageBitmap(frame.backdrop)
+        if (previousBackdrop != null && previousBackdrop !== frame.backdrop &&
+            !previousBackdrop.isRecycled
+        ) {
+            previousBackdrop.recycle()
+        }
 
         // The incoming layer must be drawn above the outgoing one. Child order is fixed, so
         // without this the old photo hides the new one until it is recycled: the new photo's
@@ -365,7 +410,17 @@ class SlideshowView @JvmOverloads constructor(
         const val FALLBACK_WIDTH = 1920
         const val FALLBACK_HEIGHT = 1080
         const val KEN_BURNS_SCALE = 1.08f
-        const val KEN_BURNS_SCALE_CONTAIN = 1.12f
+
+        /**
+         * Zoom for the fitted mode.
+         *
+         * Much gentler than the fill mode: the photo is shown whole, so a large zoom would crop
+         * exactly what fitting it was meant to preserve.
+         */
+        const val KEN_BURNS_SCALE_CONTAIN = 1.04f
+
+        /** Dims the blurred backdrop so the photo itself stays the subject. */
+        const val BACKDROP_ALPHA = 0.45f
     }
 }
 

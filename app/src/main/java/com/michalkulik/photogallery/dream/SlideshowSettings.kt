@@ -15,7 +15,10 @@ data class SlideshowSettings(
     val order: PlayOrder = PlayOrder.SHUFFLE,
     val transition: Transition = Transition.FADE,
     val kenBurns: Boolean = true,
-    val fit: FitMode = FitMode.COVER,
+    // Fitting the whole photo is the default because this is a photo screensaver: filling the
+    // screen crops a portrait picture down to about 40% of its height, which cuts off heads and
+    // feet. The blurred backdrop keeps it from looking like a letterboxed film.
+    val fit: FitMode = FitMode.CONTAIN,
     val showClock: Boolean = false,
     val dim: Float = DEFAULT_DIM,
 ) {
@@ -38,7 +41,13 @@ data class SlideshowSettings(
         fun parseTransition(raw: String?): Transition =
             if (raw == Transition.SLIDE.name) Transition.SLIDE else Transition.FADE
 
+        /**
+         * Reads the stored scaling mode.
+         *
+         * An unset value means "fit the whole photo", matching the default above. This has to
+         * agree with the data class, otherwise a fresh install would silently crop every photo.
+         */
         fun parseFit(raw: String?): FitMode =
-            if (raw == FitMode.CONTAIN.name) FitMode.CONTAIN else FitMode.COVER
+            if (raw == FitMode.COVER.name) FitMode.COVER else FitMode.CONTAIN
     }
 }
