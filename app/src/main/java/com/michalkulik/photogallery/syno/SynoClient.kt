@@ -155,12 +155,10 @@ class SynoClient {
             mapOf("offset" to "0", "limit" to ALBUM_LIMIT.toString()),
         )
         val albums = SynoParsers.parseAlbums(data)
-        // The album listing's own `total` counts albums, so the real photo count is asked for
-        // separately - otherwise the "all photos" entry would show a meaningless number.
-        val libraryCount = runCatching { itemCount(config, session, ALL_PHOTOS_ID) }
-            .onFailure { Logs.w("Cannot read the Synology library size", it) }
-            .getOrDefault(0)
-        return listOf(SynoAlbum(id = ALL_PHOTOS_ID, name = "", itemCount = libraryCount)) + albums
+        // The whole library has no count here: SYNO.Foto.Browse.Item does not report a total, so
+        // the only way to learn it is to list everything, which is 25 requests for 5000 photos.
+        // The source list computes it once a source is added instead. Zero means "unknown".
+        return listOf(SynoAlbum(id = ALL_PHOTOS_ID, name = "", itemCount = 0)) + albums
     }
 
     /**
@@ -192,17 +190,6 @@ class SynoClient {
         Logs.d("Synology listing for album $albumId: ${result.size} items over $page page(s)")
         return result
     }
-
-    /**
-     * How many items a source holds, according to the NAS.
-     *
-     * Asked for separately because the album listing's `total` describes albums, not photos, so
-     * the "all photos" entry would otherwise show a meaningless number.
-     */
-    fun itemCount(config: SynoConfig, session: SynoSession, albumId: Int): Int =
-        // A full page rather than 1: DSM rejects a limit below its minimum with 103, so asking
-        // for a single item would fail outright.
-        listPage(config, session, albumId, offset = 0, limit = SynoPaging.PAGE_SIZE).optInt("total", 0)
 
     /**
      * One page of a listing.

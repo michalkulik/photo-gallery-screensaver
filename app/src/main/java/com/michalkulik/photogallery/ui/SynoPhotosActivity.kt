@@ -6,6 +6,7 @@ import com.michalkulik.photogallery.data.PhotoRepository
 import com.michalkulik.photogallery.data.PhotoSource
 import com.michalkulik.photogallery.data.SourceKind
 import com.michalkulik.photogallery.syno.SynoAlbum
+import com.michalkulik.photogallery.syno.SynoAlbumCodec
 import com.michalkulik.photogallery.syno.SynoClient
 import com.michalkulik.photogallery.syno.SynoException
 import com.michalkulik.photogallery.syno.SynoTwoFactorRequired
@@ -34,6 +35,12 @@ class SynoPhotosActivity : TvActivity() {
 
     override fun buildContent(container: LinearLayout) {
         val settings = graph.settings
+
+        // Restored from the last successful connect, so the albums stay selectable after
+        // leaving and reopening this screen.
+        if (albums.isEmpty()) {
+            albums = SynoAlbumCodec.decode(settings.synoAlbumsJson)
+        }
 
         TvUi.body(container, getString(R.string.syno_intro))
 
@@ -136,8 +143,12 @@ class SynoPhotosActivity : TvActivity() {
         }
 
         // --- Albums ----------------------------------------------------------------------
-        if (albums.isNotEmpty()) {
-            TvUi.section(container, getString(R.string.syno_albums))
+        TvUi.section(container, getString(R.string.syno_albums))
+        if (albums.isEmpty()) {
+            // Without this the section simply would not appear and there would be nothing to
+            // tell the user that connecting is what fills it.
+            TvUi.body(container, getString(R.string.syno_no_albums_yet))
+        } else {
             albums.forEach { album ->
                 val label = if (album.id == SynoClient.ALL_PHOTOS_ID) {
                     getString(R.string.syno_all_photos)
@@ -147,7 +158,8 @@ class SynoPhotosActivity : TvActivity() {
                 TvUi.row(
                     container,
                     label,
-                    subtitle = photoCountText(this, album.itemCount),
+                    // Zero means the NAS did not report a count for this entry.
+                    subtitle = if (album.itemCount > 0) photoCountText(this, album.itemCount) else null,
                 ) { addSource(album) }
             }
         }
@@ -178,6 +190,7 @@ class SynoPhotosActivity : TvActivity() {
     /** Any change to the address or credentials invalidates the album list and the session. */
     private fun afterConfigChange() {
         albums = emptyList()
+        graph.settings.synoAlbumsJson = null
         graph.repository.synoSignOutQuietly()
         rebuild()
     }
@@ -197,6 +210,8 @@ class SynoPhotosActivity : TvActivity() {
                 // No code here: the sign-in above already consumed it and cached the session.
                 val list = withContext(Dispatchers.IO) { graph.repository.synoAlbums() }
                 albums = list
+                // Remembered so the albums are still here next time this screen is opened.
+                graph.settings.synoAlbumsJson = SynoAlbumCodec.encode(list)
                 sheet.dismiss()
                 Dialogs.message(
                     this@SynoPhotosActivity,
@@ -240,6 +255,7 @@ class SynoPhotosActivity : TvActivity() {
     private fun forgetDevice() {
         graph.repository.synoForgetDevice()
         albums = emptyList()
+        graph.settings.synoAlbumsJson = null
         Dialogs.message(this, getString(R.string.syno_title), getString(R.string.syno_device_forgotten))
         rebuild()
     }

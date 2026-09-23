@@ -106,6 +106,16 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_SYNO_DEVICE_ID, null)?.takeIf { it.isNotBlank() }
         set(value) = prefs.edit().putString(KEY_SYNO_DEVICE_ID, value).apply()
 
+    /**
+     * The album list from the last successful connect.
+     *
+     * Remembered so the albums are still selectable after leaving the setup screen, instead of
+     * requiring another sign-in just to pick one.
+     */
+    var synoAlbumsJson: String?
+        get() = prefs.getString(KEY_SYNO_ALBUMS, null)
+        set(value) = prefs.edit().putString(KEY_SYNO_ALBUMS, value).apply()
+
     /** The stored NAS settings, or null when the user has not configured one yet. */
     fun synoConfig(): SynoConfig? {
         val host = synoHost ?: return null
@@ -131,6 +141,19 @@ class Settings(context: Context) {
 
     /** Drops the remembered device token; used when the address or account changes. */
     fun clearSynoDeviceToken() = prefs.edit().remove(KEY_SYNO_DEVICE_ID).apply()
+
+    /**
+     * Forgets everything derived from a successful connect.
+     *
+     * Called when the address or account changes: the albums and the remembered device both
+     * belong to the server that issued them.
+     */
+    fun clearSynoDerivedState() {
+        prefs.edit()
+            .remove(KEY_SYNO_DEVICE_ID)
+            .remove(KEY_SYNO_ALBUMS)
+            .apply()
+    }
 
     // --- Google OAuth ----------------------------------------------------------------------
     // Only tokens are stored here; the OAuth client secret stays on the relay service.
@@ -180,6 +203,7 @@ class Settings(context: Context) {
         const val KEY_SYNO_ACCOUNT = "syno_account"
         const val KEY_SYNO_PASSWORD = "syno_password"
         const val KEY_SYNO_DEVICE_ID = "syno_device_id"
+        const val KEY_SYNO_ALBUMS = "syno_albums_json"
         const val KEY_REFRESH_TOKEN = "google_refresh_token"
         const val KEY_TOKEN_EXPIRY = "google_token_expiry"
     }

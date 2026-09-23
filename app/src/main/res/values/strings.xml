@@ -21,6 +21,7 @@
     <string name="syno_connecting">Connecting to the NAS\u2026</string>
     <string name="syno_connected">Signed in as %1$s. Found %2$d albums.</string>
     <string name="syno_albums">Albums on the NAS</string>
+    <string name="syno_no_albums_yet">Not connected yet. Use \u201cConnect and list albums\u201d above to load the album list.</string>
     <string name="syno_all_photos">All photos</string>
     <string name="syno_added">Added source: %1$s</string>
     <string name="syno_err_credentials">Wrong account or password.</string>
