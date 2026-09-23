@@ -2,7 +2,9 @@ package com.michalkulik.photogallery.google
 
 import com.michalkulik.photogallery.core.Settings
 import com.michalkulik.photogallery.util.Logs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Google sign-in for a TV that has no browser.
@@ -25,16 +27,19 @@ class GoogleAuth(private val settings: Settings, private val relay: RelayClient)
     /**
      * Polls the relay until the user finishes signing in on their phone.
      * Returns false when the session expired instead of throwing, so the UI can offer a retry.
+     *
+     * Callers invoke this from the main dispatcher, so every blocking relay call is moved to IO.
      */
     suspend fun awaitSignIn(session: RelayClient.Session): Boolean {
         val deadline = System.currentTimeMillis() + SIGN_IN_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             delay(session.pollIntervalSeconds * 1000L)
-            when (val poll = relay.poll(session.id)) {
+            val poll = withContext(Dispatchers.IO) { relay.poll(session.id) }
+            when (poll) {
                 is RelayClient.Poll.Ready -> {
                     store(poll.accessToken, poll.refreshToken, poll.expiresInSeconds)
                     // The tokens are safe on the device now, so the relay can forget them.
-                    runCatching { relay.deleteSession(session.id) }
+                    runCatching { withContext(Dispatchers.IO) { relay.deleteSession(session.id) } }
                     return true
                 }
                 is RelayClient.Poll.Failed -> throw GoogleApiException(poll.message)
@@ -45,11 +50,16 @@ class GoogleAuth(private val settings: Settings, private val relay: RelayClient)
         return false
     }
 
-    fun cancelSignIn(session: RelayClient.Session) {
-        runCatching { relay.deleteSession(session.id) }
+    suspend fun cancelSignIn(session: RelayClient.Session) {
+        runCatching { withContext(Dispatchers.IO) { relay.deleteSession(session.id) } }
     }
 
-    /** Returns a usable access token, refreshing it when it is close to expiring. */
+    /**
+     * Returns a usable access token, refreshing it when it is close to expiring.
+     *
+     * Blocking: the refresh goes over the network, so call this from a background dispatcher.
+     * The picker client already runs on IO, which is why this is not a suspend function.
+     */
     fun accessToken(): String? {
         val current = settings.accessToken
         val expiresAt = settings.tokenExpiryMillis

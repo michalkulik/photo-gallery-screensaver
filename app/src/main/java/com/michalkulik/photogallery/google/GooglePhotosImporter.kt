@@ -3,7 +3,9 @@ package com.michalkulik.photogallery.google
 import com.michalkulik.photogallery.data.PhotoCache
 import com.michalkulik.photogallery.util.Http
 import com.michalkulik.photogallery.util.Logs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Drives the full Google Photos import: create a picking session, wait for the user to pick
@@ -24,6 +26,9 @@ class GooglePhotosImporter(
     /**
      * Polls the session until the user confirms a selection.
      *
+     * The UI calls this from the main dispatcher, so the blocking picker call is moved to IO;
+     * doing it inline would raise NetworkOnMainThreadException.
+     *
      * @return true when items are ready, false when the session expired.
      */
     suspend fun awaitSelection(session: PickerSession, onPoll: (PickerSession) -> Unit = {}): Boolean {
@@ -32,7 +37,7 @@ class GooglePhotosImporter(
         while (System.currentTimeMillis() < deadline) {
             delay(interval)
             val current = try {
-                picker.getSession(session.id)
+                withContext(Dispatchers.IO) { picker.getSession(session.id) }
             } catch (error: GoogleApiException) {
                 Logs.w("Picker session poll failed", error)
                 return false

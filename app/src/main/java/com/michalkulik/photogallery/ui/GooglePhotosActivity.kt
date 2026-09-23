@@ -6,6 +6,7 @@ import com.michalkulik.photogallery.data.PhotoRepository
 import com.michalkulik.photogallery.data.PhotoSource
 import com.michalkulik.photogallery.data.SourceKind
 import com.michalkulik.photogallery.google.RelayClient
+import com.michalkulik.photogallery.util.Logs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -93,10 +94,11 @@ class GooglePhotosActivity : TvActivity() {
             } catch (error: Exception) {
                 session?.let { auth.cancelSignIn(it) }
                 sheet.dismiss()
+                Logs.e("Sign-in failed", error)
                 Dialogs.message(
                     this@GooglePhotosActivity,
                     getString(R.string.google_sign_in),
-                    getString(R.string.google_auth_failed, error.message ?: "?"),
+                    getString(R.string.google_auth_failed, describe(error)),
                 )
             }
         }
@@ -180,6 +182,14 @@ class GooglePhotosActivity : TvActivity() {
         scope.cancel()
         super.onDestroy()
     }
+
+    /**
+     * Builds a message that is useful even when the exception carries no message, which happens
+     * for a few platform exceptions and would otherwise show up as a bare "?".
+     */
+    private fun describe(error: Throwable): String =
+        error.message?.takeIf { it.isNotBlank() }
+            ?: error.javaClass.simpleName
 
     private companion object {
         const val QR_SIZE = 520
