@@ -120,7 +120,7 @@ class SynoParsersTest {
         val json = """
             {"success":true,"data":{"list":[
               {"id":11,"type":0,"time":1700000000,
-               "additional":{"thumbnail":{"cache_key":"abc123"},"filename":{"name":"a.jpg"}}},
+               "additional":{"thumbnail":{"cache_key":"abc123","original_name":"a.jpg"}}},
               {"id":12,"type":1,"time":1700000001,
                "additional":{"thumbnail":{"cache_key":"def456"}}}
             ]}}
@@ -139,7 +139,7 @@ class SynoParsersTest {
     }
 
     @Test
-    fun `falls back to a readable name when the filename is absent`() {
+    fun `falls back to a readable name when the thumbnail has no file name`() {
         val json = """{"success":true,"data":{"list":[{"id":5,"additional":{"thumbnail":{}}}]}}"""
 
         val items = SynoParsers.parseItems(SynoParsers.envelope(json))

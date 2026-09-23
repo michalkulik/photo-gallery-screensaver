@@ -79,17 +79,22 @@ class PhotoRepository(
     /** Photos the screensaver should play right now. */
     fun activePhotos(): List<Photo> = activeSource()?.let { photosFor(it) }.orEmpty()
 
-    /** Recomputes and persists the photo count of a source (used after imports). */
-    fun refreshCount(sourceId: String) {
+    /**
+     * Recomputes and persists the photo count of a source.
+     *
+     * @return true when the stored count actually changed, so callers can avoid redrawing for
+     *   nothing.
+     */
+    fun refreshCount(sourceId: String): Boolean {
         val all = sources()
-        val source = all.firstOrNull { it.id == sourceId } ?: return
+        val source = all.firstOrNull { it.id == sourceId } ?: return false
         val count = when (source.kind) {
             SourceKind.SYNO -> synoPhotoCount(source)
             else -> photosFor(source).size
         }
-        if (source.photoCount != count) {
-            save(all.map { if (it.id == sourceId) it.copy(photoCount = count) else it })
-        }
+        if (source.photoCount == count) return false
+        save(all.map { if (it.id == sourceId) it.copy(photoCount = count) else it })
+        return true
     }
 
     // --- Synology ---------------------------------------------------------------------------

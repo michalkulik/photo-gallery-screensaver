@@ -167,10 +167,11 @@ object SynoParsers {
             val item = array.optJSONObject(i) ?: continue
             val id = item.optInt("id", 0)
             if (id == 0) continue
-            // The thumbnail cache key is required for every later download call.
-            val additional = item.optJSONObject("additional")
-            val thumbnail = additional?.optJSONObject("thumbnail")
-            val filename = additional?.optJSONObject("filename")?.optString("name").orEmpty()
+            // The thumbnail block carries both the cache key needed for downloads and the
+            // original file name. "filename" is not a valid `additional` value, so the name is
+            // read from here rather than requested separately.
+            val thumbnail = item.optJSONObject("additional")?.optJSONObject("thumbnail")
+            val filename = thumbnail?.optString("original_name").orEmpty()
             result += SynoItem(
                 id = id,
                 filename = filename.ifBlank { "item-$id" },

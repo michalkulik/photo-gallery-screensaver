@@ -3,6 +3,7 @@ package com.michalkulik.photogallery.syno
 import com.michalkulik.photogallery.util.Http
 import com.michalkulik.photogallery.util.HttpResult
 import com.michalkulik.photogallery.util.Logs
+import org.json.JSONObject
 import java.net.URLEncoder
 
 /**
@@ -109,11 +110,11 @@ class SynoClient {
         params["passwd"] = passwd
         params["session"] = SESSION
         params["format"] = "sid"
-        // Present in the reference client; DSM accepts sign-ins without them but including them
-        // keeps this request shaped like the one Synology's own clients send.
+        // Deliberately NOT sending enable_syno_token. Asking for it makes DSM demand an
+        // X-SYNO-TOKEN header on every later call - including the image downloads, which are
+        // plain URLs - and without it every request fails with 119 "session expired". The token
+        // is CSRF protection for browser sessions; this is a direct API client.
         params["logintype"] = "local"
-        params["client"] = "browser"
-        params["enable_syno_token"] = "yes"
         if (!otpCode.isNullOrBlank()) {
             params["otp_code"] = otpCode.trim()
         }
@@ -154,12 +155,19 @@ class SynoClient {
             mapOf("offset" to "0", "limit" to ALBUM_LIMIT.toString()),
         )
         val albums = SynoParsers.parseAlbums(data)
-        val total = data.optInt("total", albums.sumOf { it.itemCount })
-        return listOf(SynoAlbum(id = ALL_PHOTOS_ID, name = "", itemCount = total)) + albums
+        // The album listing's own `total` counts albums, so the real photo count is asked for
+        // separately - otherwise the "all photos" entry would show a meaningless number.
+        val libraryCount = runCatching { itemCount(config, session, ALL_PHOTOS_ID) }
+            .onFailure { Logs.w("Cannot read the Synology library size", it) }
+            .getOrDefault(0)
+        return listOf(SynoAlbum(id = ALL_PHOTOS_ID, name = "", itemCount = libraryCount)) + albums
     }
 
     /**
-     * Lists photos, newest first.
+     * Lists photos, newest first, following pagination.
+     *
+     * DSM returns one page per request, so a single call only ever exposes the first few hundred
+     * items. Paging is what makes a library of thousands usable.
      *
      * @param albumId an album id from [albums], or [ALL_PHOTOS_ID] for the whole library.
      * @param limit   how many items to expose to the slideshow.
@@ -170,25 +178,59 @@ class SynoClient {
         albumId: Int,
         limit: Int = DEFAULT_LIMIT,
     ): List<SynoItem> {
+        var page = 0
+        val result = SynoPaging.collect(limit) { offset, size ->
+            val data = listPage(config, session, albumId, offset, size)
+            page++
+            val items = SynoParsers.parseItems(data)
+            val total = data.optInt("total", -1)
+            Logs.d(
+                "Synology items page $page: offset=$offset requested=$size got=${items.size} total=$total",
+            )
+            SynoPaging.Page(items = items, total = total)
+        }
+        Logs.d("Synology listing for album $albumId: ${result.size} items over $page page(s)")
+        return result
+    }
+
+    /**
+     * How many items a source holds, according to the NAS.
+     *
+     * Asked for separately because the album listing's `total` describes albums, not photos, so
+     * the "all photos" entry would otherwise show a meaningless number.
+     */
+    fun itemCount(config: SynoConfig, session: SynoSession, albumId: Int): Int =
+        // A full page rather than 1: DSM rejects a limit below its minimum with 103, so asking
+        // for a single item would fail outright.
+        listPage(config, session, albumId, offset = 0, limit = SynoPaging.PAGE_SIZE).optInt("total", 0)
+
+    /**
+     * One page of a listing.
+     *
+     * Everything goes through `SYNO.Foto.Browse.Item`:
+     * an album is selected with the `id` parameter, and leaving it out lists the whole library.
+     * `SYNO.Foto.Browse.Timeline` is not used here on purpose - its only method is `get`, which
+     * returns date sections rather than photos.
+     */
+    private fun listPage(
+        config: SynoConfig,
+        session: SynoSession,
+        albumId: Int,
+        offset: Int,
+        limit: Int,
+    ): JSONObject {
         val params = LinkedHashMap<String, String>()
-        params["offset"] = "0"
+        params["offset"] = offset.toString()
         params["limit"] = limit.toString()
         params["sort_by"] = "takentime"
         params["sort_direction"] = "desc"
-        // Without "additional" the response carries no thumbnail cache key, and every
-        // later download of the image would be rejected.
-        params["additional"] = """["thumbnail","filename"]"""
-
-        return if (albumId == ALL_PHOTOS_ID) {
-            SynoParsers.parseItems(
-                call(config, session, "SYNO.Foto.Browse.Timeline", 5, "list", params),
-            )
-        } else {
-            params["album_id"] = albumId.toString()
-            SynoParsers.parseItems(
-                call(config, session, "SYNO.Foto.Browse.Item", 6, "list", params),
-            )
+        // Only values DSM accepts here. An unknown name is rejected with 120, which reads as
+        // "session expired" but actually names the offending parameter in the body.
+        params["additional"] = """["thumbnail"]"""
+        if (albumId != ALL_PHOTOS_ID) {
+            params["id"] = albumId.toString()
         }
+        return call(config, session, "SYNO.Foto.Browse.Item", 6, "list", params)
     }
 
     /**
@@ -231,19 +273,29 @@ class SynoClient {
         version: Int,
         method: String,
         params: Map<String, String>,
-    ) = SynoParsers.envelope(
-        run {
-            val withSid: Map<String, String> = params + mapOf("_sid" to session.sid)
-            val result = Http.getJson(
-                url(config, api, version, method, withSid),
-                insecure = config.ignoreCertificate,
-            )
-            if (!result.isSuccess) {
-                throw SynoException("$api.$method failed (${result.code}) ${result.body.take(200)}")
-            }
-            result.body
-        },
-    )
+    ) = try {
+        SynoParsers.envelope(
+            run {
+                val withSid: Map<String, String> = params + mapOf("_sid" to session.sid)
+                val requestUrl = url(config, api, version, method, withSid)
+                val result = Http.getJson(requestUrl, insecure = config.ignoreCertificate)
+                if (!result.isSuccess) {
+                    throw SynoException("$api.$method failed (${result.code}) ${result.body.take(200)}")
+                }
+                // Logged without the session id, which is a credential.
+                if (SynoParsers.errorCode(result.body) != null) {
+                    Logs.w(
+                        "Synology $api.$method rejected: ${result.body.take(300)} " +
+                            "params=${params.keys.joinToString(",")}",
+                    )
+                }
+                result.body
+            },
+        )
+    } catch (error: SynoException) {
+        // Naming the API matters: a bare error code does not say which call failed.
+        throw SynoException("$api.$method: ${error.message}")
+    }
 
     private fun fetchPublicKey(config: SynoConfig): String {
         val result = Http.getJson(
@@ -295,8 +347,13 @@ class SynoClient {
         /** Album id standing for "the whole library"; served through the timeline API. */
         const val ALL_PHOTOS_ID = 0
 
-        /** How many photos the screensaver will cycle through. */
-        const val DEFAULT_LIMIT = 500
+        /**
+         * How many photos the screensaver will cycle through.
+         *
+         * Generous on purpose: this is only a listing, and each image is fetched lazily while
+         * the slideshow runs, so a large library costs nothing until it is actually shown.
+         */
+        const val DEFAULT_LIMIT = 5000
 
         private const val ALBUM_LIMIT = 200
 
