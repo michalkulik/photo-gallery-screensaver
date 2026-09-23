@@ -24,6 +24,10 @@
     <string name="syno_all_photos">Wszystkie zdjęcia</string>
     <string name="syno_added">Dodano źródło: %1$s</string>
     <string name="syno_err_credentials">Błędne konto lub hasło.</string>
+    <string name="syno_otp_title">Kod dwuetapowy</string>
+    <string name="syno_otp_hint">Wpisz 6-cyfrowy kod z aplikacji uwierzytelniającej. Musisz to zrobić tylko raz \u2014 telewizor zostanie zapamiętany.</string>
+    <string name="syno_device_remembered">Urządzenie zapamiętane (kod niepotrzebny)</string>
+    <string name="syno_device_forgotten">Zapomniano. Następne logowanie poprosi o kod.</string>
     <string name="syno_err_ip_blocked">Serwer zablokował to urządzenie po kilku nieudanych próbach logowania (Auto Block). Usuń zablokowany adres w DSM: Panel sterowania \u25b8 Zabezpieczenia \u25b8 Auto Block, a potem spróbuj ponownie.</string>
     <string name="syno_err_permission">To konto nie ma dostępu do Synology Photos.</string>
     <string name="syno_err_2fa">To konto używa weryfikacji dwuetapowej, która nie jest jeszcze obsługiwana. Utwórz osobne konto bez niej.</string>

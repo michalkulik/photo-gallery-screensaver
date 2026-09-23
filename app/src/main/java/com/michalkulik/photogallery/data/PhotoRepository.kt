@@ -94,18 +94,37 @@ class PhotoRepository(
     // --- Synology ---------------------------------------------------------------------------
 
     /** Albums on the configured NAS, including a synthetic "all photos" entry. */
-    fun synoAlbums(): List<SynoAlbum> {
+    fun synoAlbums(otpCode: String? = null): List<SynoAlbum> {
         val config = settings.synoConfig() ?: throw SynoException("nas_not_configured")
-        return withSession(config) { syno.albums(config, it) }
+        return withSession(config, otpCode = otpCode) { syno.albums(config, it) }
     }
 
-    /** Verifies the NAS address and credentials; used by the setup screen. */
-    fun synoTestConnection(): String {
+    /**
+     * Verifies the NAS address and credentials; used by the setup screen.
+     *
+     * @param otpCode the one-time password, needed the first time for an account with 2FA.
+     * @throws SynoTwoFactorRequired when the account uses 2FA and the code has not been given yet.
+     */
+    fun synoTestConnection(otpCode: String? = null): String {
         val config = settings.synoConfig() ?: throw SynoException("nas_not_configured")
         invalidateSynoSession()
-        val session = syno.login(config)
+        val session = syno.login(
+            config = config,
+            otpCode = otpCode,
+            deviceId = if (otpCode.isNullOrBlank()) settings.synoDeviceId else null,
+            deviceName = SynoClient.DEVICE_NAME,
+        )
+        rememberDeviceToken(session)
         // Report the account back so the UI can confirm *which* user was accepted.
         return config.account.ifBlank { session.sid.take(6) }
+    }
+
+    /** True when a device token is stored, meaning no code is needed on the next sign-in. */
+    fun synoHasDeviceToken(): Boolean = settings.synoDeviceId != null
+
+    fun synoForgetDevice() {
+        invalidateSynoSession()
+        settings.clearSynoDeviceToken()
     }
 
     fun synoSignOut() {
@@ -119,7 +138,11 @@ class PhotoRepository(
     }
 
     /** Drops the cached session without touching the stored credentials. */
-    fun synoSignOutQuietly() = invalidateSynoSession()
+    fun synoSignOutQuietly() {
+        invalidateSynoSession()
+        // The remembered device is tied to the address/account pair, so a change invalidates it.
+        settings.clearSynoDeviceToken()
+    }
 
     /**
      * Reads the current items of a Synology album.
@@ -152,15 +175,19 @@ class PhotoRepository(
     private fun synoPhotoCount(source: PhotoSource): Int = synoPhotos(source).size
 
     /** Runs [body] with a valid session, retrying once if the NAS reports an expired one. */
-    private fun <T> withSession(config: SynoConfig, body: (SynoSession) -> T): T {
-        val session = sessionFor(config)
+    private fun <T> withSession(
+        config: SynoConfig,
+        otpCode: String? = null,
+        body: (SynoSession) -> T,
+    ): T {
+        val session = sessionFor(config, otpCode = otpCode)
         return try {
             body(session)
         } catch (error: SynoException) {
             // 119/120 mean the session went away; one silent re-login keeps the screensaver alive.
             if (!error.message.orEmpty().contains("session")) throw error
             Logs.w("Synology session expired, signing in again")
-            body(sessionFor(config, forceLogin = true))
+            body(sessionFor(config, forceLogin = true, otpCode = otpCode))
         }
     }
 
@@ -172,17 +199,32 @@ class PhotoRepository(
 
     private val synoSessionLock = Any()
 
-    private fun sessionFor(config: SynoConfig, forceLogin: Boolean = false): SynoSession =
-        synchronized(synoSessionLock) {
-            val key = "${config.baseUrl}|${config.account}|${config.password.hashCode()}"
-            if (!forceLogin) {
-                synoSession?.takeIf { synoSessionKey == key }?.let { return it }
-            }
-            val session = syno.login(config)
-            synoSession = session
-            synoSessionKey = key
-            session
+    private fun sessionFor(
+        config: SynoConfig,
+        forceLogin: Boolean = false,
+        otpCode: String? = null,
+    ): SynoSession = synchronized(synoSessionLock) {
+        val key = "${config.baseUrl}|${config.account}|${config.password.hashCode()}"
+        if (!forceLogin && otpCode.isNullOrBlank()) {
+            synoSession?.takeIf { synoSessionKey == key }?.let { return it }
         }
+        val session = syno.login(
+            config = config,
+            otpCode = otpCode,
+            // Replay the remembered device so an account with 2FA does not ask for a code again.
+            deviceId = if (otpCode.isNullOrBlank()) settings.synoDeviceId else null,
+            deviceName = SynoClient.DEVICE_NAME,
+        )
+        rememberDeviceToken(session)
+        synoSession = session
+        synoSessionKey = key
+        session
+    }
+
+    /** Stores the device token the NAS issued, so the next sign-in needs no code. */
+    private fun rememberDeviceToken(session: SynoSession) {
+        session.deviceId?.let { settings.synoDeviceId = it }
+    }
 
     private fun invalidateSynoSession() {
         synchronized(synoSessionLock) {

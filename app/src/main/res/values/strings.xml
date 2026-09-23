@@ -24,6 +24,10 @@
     <string name="syno_all_photos">All photos</string>
     <string name="syno_added">Added source: %1$s</string>
     <string name="syno_err_credentials">Wrong account or password.</string>
+    <string name="syno_otp_title">Two-factor code</string>
+    <string name="syno_otp_hint">Enter the 6-digit code from your authenticator app. You only need to do this once \u2014 the TV is remembered afterwards.</string>
+    <string name="syno_device_remembered">Device remembered (no code needed)</string>
+    <string name="syno_device_forgotten">Forgotten. The next sign-in will ask for a code.</string>
     <string name="syno_err_ip_blocked">The NAS has blocked this device after repeated failed sign-ins (Auto Block). Remove the blocked address in DSM under Control Panel \u25b8 Security \u25b8 Auto Block, then try again.</string>
     <string name="syno_err_permission">That account is not allowed to use Synology Photos.</string>
     <string name="syno_err_2fa">This account uses two-factor authentication, which is not supported yet. Create a dedicated account without it.</string>

@@ -19,32 +19,66 @@ import javax.crypto.Cipher
  */
 class SynoClient {
 
-    /** Logs in and records which API versions this NAS supports. */
-    fun login(config: SynoConfig): SynoSession {
+    /**
+     * Logs in and records which API versions this NAS supports.
+     *
+     * Handles the two-factor case: when the account uses a one-time password and neither a
+     * [otpCode] nor a remembered [deviceId] is supplied, the NAS answers 403 and this throws
+     * [SynoTwoFactorRequired] so the caller can ask for the code.
+     *
+     * Passing a [deviceId] that the NAS still accepts skips the code entirely, which is what
+     * makes a TV usable: the code is typed once and remembered afterwards.
+     */
+    fun login(
+        config: SynoConfig,
+        otpCode: String? = null,
+        deviceId: String? = null,
+        deviceName: String? = null,
+    ): SynoSession {
         val publicKey = fetchPublicKey(config)
         val encrypted = encryptPassword(publicKey, config.password)
 
+        val params = LinkedHashMap<String, String>()
+        params["account"] = config.account
+        params["passwd"] = encrypted
+        params["session"] = SESSION
+        params["format"] = "sid"
+        if (!otpCode.isNullOrBlank()) {
+            params["otp_code"] = otpCode.trim()
+        }
+        if (!deviceId.isNullOrBlank()) {
+            params["device_id"] = deviceId.trim()
+        }
+        // Ask the NAS to hand back a device token so later sign-ins need no code. Only worth
+        // requesting when a code was actually used, otherwise there is nothing to skip.
+        if (!otpCode.isNullOrBlank() && !deviceName.isNullOrBlank()) {
+            params["enable_device_token"] = "yes"
+            params["device_name"] = deviceName
+        }
+
         val login = Http.getJson(
-            url(
-                config,
-                "SYNO.API.Auth",
-                7,
-                "login",
-                mapOf(
-                    "account" to config.account,
-                    "passwd" to encrypted,
-                    "session" to SESSION,
-                    "format" to "sid",
-                ),
-            ),
+            url(config, "SYNO.API.Auth", 7, "login", params),
             insecure = config.ignoreCertificate,
         )
         if (!login.isSuccess) {
             throw SynoException("login_failed (${login.code}) ${login.body.take(200)}")
         }
-        val sid = SynoParsers.parseSession(SynoParsers.envelope(login.body))
 
-        return SynoSession(sid = sid, apiVersions = fetchApiVersions(config))
+        val data = try {
+            SynoParsers.envelope(login.body)
+        } catch (error: SynoException) {
+            // 403 is the NAS asking for the one-time password, not a real failure.
+            if (error.message.orEmpty().contains("two_factor_required")) {
+                throw SynoTwoFactorRequired()
+            }
+            throw error
+        }
+
+        return SynoSession(
+            sid = SynoParsers.parseSession(data),
+            apiVersions = fetchApiVersions(config),
+            deviceId = SynoParsers.parseDeviceId(data),
+        )
     }
 
     fun logout(config: SynoConfig, session: SynoSession) {
@@ -233,5 +267,11 @@ class SynoClient {
          * plenty for 1080p and far cheaper than re-encoding the original.
          */
         const val SIZE_TV = "xl"
+
+        /**
+         * Name the NAS shows in its "remembered devices" list. Lets the user revoke this TV's
+         * access later without affecting other clients.
+         */
+        const val DEVICE_NAME = "Photo Gallery Screensaver (TV)"
     }
 }

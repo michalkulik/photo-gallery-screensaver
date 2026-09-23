@@ -42,11 +42,29 @@ data class SynoItem(
     var cacheKey: String? = null
 }
 
-/** A logged-in session: the session id plus the APIs this NAS actually supports. */
-data class SynoSession(val sid: String, val apiVersions: Map<String, Int>)
+/**
+ * A logged-in session: the session id plus the APIs this NAS actually supports.
+ *
+ * [deviceId] is Synology's "remember this device" token. When present it can be replayed on a
+ * later sign-in to skip the one-time password, which is what keeps a TV from asking for a fresh
+ * TOTP code every time the app restarts.
+ */
+data class SynoSession(
+    val sid: String,
+    val apiVersions: Map<String, Int>,
+    val deviceId: String? = null,
+)
 
 /** Raised for Synology failures that should be shown to the user. */
-class SynoException(message: String) : Exception(message)
+open class SynoException(message: String) : Exception(message)
+
+/**
+ * The account is protected by a one-time password and the code is still needed.
+ *
+ * A subclass so that existing catch blocks keep working; the setup screen catches this one
+ * specifically to ask for the code instead of showing an error.
+ */
+class SynoTwoFactorRequired : SynoException("two_factor_required")
 
 /**
  * Parsers for the Synology WebAPI payloads.
@@ -98,6 +116,10 @@ object SynoParsers {
     fun parseSession(data: JSONObject): String =
         data.optString("sid").takeIf { it.isNotBlank() }
             ?: throw SynoException("login_succeeded_without_a_session")
+
+    /** The "remember this device" token, present only when the caller asked for one. */
+    fun parseDeviceId(data: JSONObject): String? =
+        data.optString("did").takeIf { it.isNotBlank() }
 
     fun parseAlbums(data: JSONObject): List<SynoAlbum> {
         val array = data.optJSONArray("list") ?: return emptyList()

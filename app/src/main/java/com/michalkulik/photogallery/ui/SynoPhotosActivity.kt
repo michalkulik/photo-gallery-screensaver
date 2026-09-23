@@ -8,6 +8,7 @@ import com.michalkulik.photogallery.data.SourceKind
 import com.michalkulik.photogallery.syno.SynoAlbum
 import com.michalkulik.photogallery.syno.SynoClient
 import com.michalkulik.photogallery.syno.SynoException
+import com.michalkulik.photogallery.syno.SynoTwoFactorRequired
 import com.michalkulik.photogallery.util.Logs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +124,15 @@ class SynoPhotosActivity : TvActivity() {
             subtitle = if (settings.synoConfig() != null) null else getString(R.string.syno_incomplete),
         ) { testConnection() }
 
+        // --- Two-factor ------------------------------------------------------------------
+        if (graph.repository.synoHasDeviceToken()) {
+            TvUi.row(
+                container,
+                getString(R.string.syno_device_remembered),
+                trailing = CHECK,
+            ) { forgetDevice() }
+        }
+
         // --- Albums ----------------------------------------------------------------------
         if (albums.isNotEmpty()) {
             TvUi.section(container, getString(R.string.syno_albums))
@@ -170,7 +180,7 @@ class SynoPhotosActivity : TvActivity() {
         rebuild()
     }
 
-    private fun testConnection() {
+    private fun testConnection(otpCode: String? = null) {
         if (graph.settings.synoConfig() == null) {
             Dialogs.message(this, getString(R.string.syno_title), getString(R.string.syno_incomplete))
             return
@@ -181,8 +191,8 @@ class SynoPhotosActivity : TvActivity() {
         sheet.show()
         scope.launch {
             try {
-                val account = withContext(Dispatchers.IO) { graph.repository.synoTestConnection() }
-                val list = withContext(Dispatchers.IO) { graph.repository.synoAlbums() }
+                val account = withContext(Dispatchers.IO) { graph.repository.synoTestConnection(otpCode) }
+                val list = withContext(Dispatchers.IO) { graph.repository.synoAlbums(otpCode) }
                 albums = list
                 sheet.dismiss()
                 Dialogs.message(
@@ -191,6 +201,9 @@ class SynoPhotosActivity : TvActivity() {
                     getString(R.string.syno_connected, account, list.size - 1),
                 )
                 rebuild()
+            } catch (needsCode: SynoTwoFactorRequired) {
+                sheet.dismiss()
+                askForOneTimeCode()
             } catch (error: Exception) {
                 sheet.dismiss()
                 Logs.e("Synology connection failed", error)
@@ -201,6 +214,31 @@ class SynoPhotosActivity : TvActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Asks for the TOTP code. The code is only needed once: on success the NAS issues a device
+     * token, which is stored so later sign-ins skip this prompt entirely.
+     */
+    private fun askForOneTimeCode() {
+        Dialogs.input(
+            this,
+            getString(R.string.syno_otp_title),
+            "",
+            onResult = { code ->
+                if (code.isNotBlank()) {
+                    testConnection(code)
+                }
+            },
+        )
+    }
+
+    /** Drops the remembered device token so a code is requested again. */
+    private fun forgetDevice() {
+        graph.repository.synoForgetDevice()
+        albums = emptyList()
+        Dialogs.message(this, getString(R.string.syno_title), getString(R.string.syno_device_forgotten))
+        rebuild()
     }
 
     private fun addSource(album: SynoAlbum) {

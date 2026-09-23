@@ -95,6 +95,17 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_SYNO_PASSWORD, null)?.takeIf { it.isNotBlank() }
         set(value) = prefs.edit().putString(KEY_SYNO_PASSWORD, value).apply()
 
+    /**
+     * Synology's "remember this device" token.
+     *
+     * Replaying it on later sign-ins skips the one-time password, so the code only has to be
+     * typed once on the TV. Cleared whenever the address or account changes, because the NAS
+     * ties the token to that pair.
+     */
+    var synoDeviceId: String?
+        get() = prefs.getString(KEY_SYNO_DEVICE_ID, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_SYNO_DEVICE_ID, value).apply()
+
     /** The stored NAS settings, or null when the user has not configured one yet. */
     fun synoConfig(): SynoConfig? {
         val host = synoHost ?: return null
@@ -111,8 +122,15 @@ class Settings(context: Context) {
     }
 
     fun clearSynoCredentials() {
-        prefs.edit().remove(KEY_SYNO_ACCOUNT).remove(KEY_SYNO_PASSWORD).apply()
+        prefs.edit()
+            .remove(KEY_SYNO_ACCOUNT)
+            .remove(KEY_SYNO_PASSWORD)
+            .remove(KEY_SYNO_DEVICE_ID)
+            .apply()
     }
+
+    /** Drops the remembered device token; used when the address or account changes. */
+    fun clearSynoDeviceToken() = prefs.edit().remove(KEY_SYNO_DEVICE_ID).apply()
 
     // --- Google OAuth ----------------------------------------------------------------------
     // Only tokens are stored here; the OAuth client secret stays on the relay service.
@@ -161,6 +179,7 @@ class Settings(context: Context) {
         const val KEY_SYNO_INSECURE_TLS = "syno_ignore_certificate"
         const val KEY_SYNO_ACCOUNT = "syno_account"
         const val KEY_SYNO_PASSWORD = "syno_password"
+        const val KEY_SYNO_DEVICE_ID = "syno_device_id"
         const val KEY_REFRESH_TOKEN = "google_refresh_token"
         const val KEY_TOKEN_EXPIRY = "google_token_expiry"
     }
