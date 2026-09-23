@@ -43,6 +43,11 @@ class SynoClient {
         params["passwd"] = encrypted
         params["session"] = SESSION
         params["format"] = "sid"
+        // Present in the reference client; DSM accepts sign-ins without them but including them
+        // keeps this request shaped like the one Synology's own clients send.
+        params["logintype"] = "local"
+        params["client"] = "browser"
+        params["enable_syno_token"] = "yes"
         if (!otpCode.isNullOrBlank()) {
             params["otp_code"] = otpCode.trim()
         }
@@ -59,6 +64,14 @@ class SynoClient {
         val login = Http.getJson(
             url(config, "SYNO.API.Auth", 7, "login", params),
             insecure = config.ignoreCertificate,
+        )
+        // Logged without the password itself: the length and the account are what actually
+        // matter when a NAS rejects a sign-in that the user believes is correct.
+        Logs.d(
+            "Synology login: account=${config.account} passwordLength=${config.password.length} " +
+                "encryptedLength=${encrypted.length} otp=${!otpCode.isNullOrBlank()} " +
+                "deviceId=${!deviceId.isNullOrBlank()} httpCode=${login.code} " +
+                "errorCode=${SynoParsers.errorCode(login.body)}",
         )
         if (!login.isSuccess) {
             throw SynoException("login_failed (${login.code}) ${login.body.take(200)}")

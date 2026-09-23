@@ -129,6 +129,8 @@ object Dialogs {
         title: String,
         initial: String,
         secret: Boolean = false,
+        // Kept before the callback so callers can still pass the callback as a trailing lambda.
+        trim: Boolean = true,
         onResult: (String) -> Unit,
     ) {
         val input = EditText(context).apply {
@@ -152,7 +154,11 @@ object Dialogs {
         AlertDialog.Builder(context)
             .setTitle(title)
             .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ -> onResult(input.text.toString().trim()) }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                // Passwords must never be trimmed: a leading or trailing space is part of them.
+                val raw = input.text.toString()
+                onResult(if (trim) raw.trim() else raw)
+            }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
         input.requestFocus()

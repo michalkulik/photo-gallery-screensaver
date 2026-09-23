@@ -111,10 +111,12 @@ class SynoPhotosActivity : TvActivity() {
                     getString(R.string.syno_password),
                     settings.synoPassword.orEmpty(),
                     secret = true,
-                ) { value ->
-                    settings.synoPassword = value
-                    afterConfigChange()
-                }
+                    onResult = { value ->
+                        settings.synoPassword = value
+                        afterConfigChange()
+                    },
+                    trim = false,
+                )
             },
         )
 
