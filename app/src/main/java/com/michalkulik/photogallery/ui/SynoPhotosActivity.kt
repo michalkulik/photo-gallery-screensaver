@@ -194,7 +194,8 @@ class SynoPhotosActivity : TvActivity() {
         scope.launch {
             try {
                 val account = withContext(Dispatchers.IO) { graph.repository.synoTestConnection(otpCode) }
-                val list = withContext(Dispatchers.IO) { graph.repository.synoAlbums(otpCode) }
+                // No code here: the sign-in above already consumed it and cached the session.
+                val list = withContext(Dispatchers.IO) { graph.repository.synoAlbums() }
                 albums = list
                 sheet.dismiss()
                 Dialogs.message(

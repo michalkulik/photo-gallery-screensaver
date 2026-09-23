@@ -6,6 +6,7 @@ import com.michalkulik.photogallery.syno.SynoAlbum
 import com.michalkulik.photogallery.syno.SynoClient
 import com.michalkulik.photogallery.syno.SynoConfig
 import com.michalkulik.photogallery.syno.SynoException
+import com.michalkulik.photogallery.syno.SynoLoginPlan
 import com.michalkulik.photogallery.syno.SynoSession
 import com.michalkulik.photogallery.util.Logs
 import java.io.File
@@ -93,10 +94,15 @@ class PhotoRepository(
 
     // --- Synology ---------------------------------------------------------------------------
 
-    /** Albums on the configured NAS, including a synthetic "all photos" entry. */
-    fun synoAlbums(otpCode: String? = null): List<SynoAlbum> {
+    /**
+     * Albums on the configured NAS, including a synthetic "all photos" entry.
+     *
+     * No code is passed on purpose: [synoTestConnection] has already signed in and cached the
+     * session, and a one-time password cannot be used twice.
+     */
+    fun synoAlbums(): List<SynoAlbum> {
         val config = settings.synoConfig() ?: throw SynoException("nas_not_configured")
-        return withSession(config, otpCode = otpCode) { syno.albums(config, it) }
+        return withSession(config) { syno.albums(config, it) }
     }
 
     /**
@@ -204,9 +210,12 @@ class PhotoRepository(
         forceLogin: Boolean = false,
         otpCode: String? = null,
     ): SynoSession = synchronized(synoSessionLock) {
-        val key = "${config.baseUrl}|${config.account}|${config.password.hashCode()}"
-        if (!forceLogin && otpCode.isNullOrBlank()) {
-            synoSession?.takeIf { synoSessionKey == key }?.let { return it }
+        val key = SynoLoginPlan.sessionKey(config.baseUrl, config.account, config.password)
+        // A one-time password is consumed by the sign-in that uses it, so an existing session
+        // must always be reused - even when the caller still has a code in hand. Logging in
+        // again with the same code gets it rejected and looks like a wrong password.
+        if (SynoLoginPlan.canReuseSession(synoSessionKey, key, forceLogin)) {
+            synoSession?.let { return it }
         }
         val session = syno.login(
             config = config,

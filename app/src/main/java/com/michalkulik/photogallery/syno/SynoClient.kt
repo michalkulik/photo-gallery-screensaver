@@ -42,10 +42,11 @@ class SynoClient {
             .onFailure { Logs.w("Cannot wrap the password with the NAS public key", it) }
             .getOrNull()
 
-        val attempts = if (config.secure) {
-            listOfNotNull(plain, wrapped)
-        } else {
-            listOfNotNull(wrapped, plain)
+        val attempts = SynoLoginPlan.passwordForms(config.secure).mapNotNull { form ->
+            when (form) {
+                SynoLoginPlan.PasswordForm.PLAIN -> plain
+                SynoLoginPlan.PasswordForm.WRAPPED -> wrapped
+            }
         }
 
         var failure: String? = null
@@ -72,17 +73,24 @@ class SynoClient {
 
             if (errorCode == null) {
                 val data = SynoParsers.envelope(result.body)
-                return SynoSession(
+                val session = SynoSession(
                     sid = SynoParsers.parseSession(data),
                     apiVersions = fetchApiVersions(config),
                     deviceId = SynoParsers.parseDeviceId(data),
                 )
+                // Keys only, never values: this is how we find out whether the NAS actually
+                // hands back a device token, which the screensaver needs to sign in unattended.
+                Logs.d(
+                    "Synology login ok: dataKeys=${data.keys().asSequence().toList()} " +
+                        "deviceToken=${session.deviceId != null}",
+                )
+                return session
             }
 
             failure = SynoParsers.describeError(errorCode) + " (code $errorCode)"
             // Only a rejected password justifies trying the other form; anything else would
             // just burn another sign-in attempt against Auto Block.
-            if (errorCode != WRONG_CREDENTIALS) return@forEachIndexed
+            if (!SynoLoginPlan.shouldRetryWithOtherForm(errorCode)) return@forEachIndexed
         }
 
         throw SynoException(failure ?: "login_failed")
@@ -303,8 +311,5 @@ class SynoClient {
          * access later without affecting other clients.
          */
         const val DEVICE_NAME = "Photo Gallery Screensaver (TV)"
-
-        /** DSM's code for a rejected account/password pair. */
-        private const val WRONG_CREDENTIALS = 400
     }
 }
