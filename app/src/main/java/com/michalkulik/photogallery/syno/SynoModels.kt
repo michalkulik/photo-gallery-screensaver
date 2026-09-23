@@ -134,9 +134,14 @@ object SynoParsers {
         data.optString("sid").takeIf { it.isNotBlank() }
             ?: throw SynoException("login_succeeded_without_a_session")
 
-    /** The "remember this device" token, present only when the caller asked for one. */
+    /**
+     * The "remember this device" token, present only when the caller asked for one.
+     *
+     * DSM 7 names it `device_id`; older builds used `did`, so both are accepted.
+     */
     fun parseDeviceId(data: JSONObject): String? =
-        data.optString("did").takeIf { it.isNotBlank() }
+        data.optString("device_id").takeIf { it.isNotBlank() }
+            ?: data.optString("did").takeIf { it.isNotBlank() }
 
     fun parseAlbums(data: JSONObject): List<SynoAlbum> {
         val array = data.optJSONArray("list") ?: return emptyList()

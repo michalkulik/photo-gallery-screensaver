@@ -113,16 +113,13 @@ class PhotoRepository(
      */
     fun synoTestConnection(otpCode: String? = null): String {
         val config = settings.synoConfig() ?: throw SynoException("nas_not_configured")
+        // This is the screen where the user (re)enters credentials, so always sign in afresh.
         invalidateSynoSession()
-        val session = syno.login(
-            config = config,
-            otpCode = otpCode,
-            deviceId = if (otpCode.isNullOrBlank()) settings.synoDeviceId else null,
-            deviceName = SynoClient.DEVICE_NAME,
-        )
-        rememberDeviceToken(session)
-        // Report the account back so the UI can confirm *which* user was accepted.
-        return config.account.ifBlank { session.sid.take(6) }
+        // Routed through sessionFor so the resulting session is cached. A one-time password is
+        // single-use, so whatever runs next - the album listing - must reuse this session
+        // instead of signing in again and being asked for another code.
+        sessionFor(config, forceLogin = true, otpCode = otpCode)
+        return config.account
     }
 
     /** True when a device token is stored, meaning no code is needed on the next sign-in. */

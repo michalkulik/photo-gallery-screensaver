@@ -61,11 +61,30 @@ class SynoParsersTest {
 
     @Test
     fun `reads the remembered device token from a login response`() {
-        val json = """{"success":true,"data":{"sid":"abc","did":"device-token-123"}}"""
+        // DSM 7 returns device_id. Looking only for "did" silently produced a null token, so the
+        // screensaver could never sign in unattended and kept asking for a code.
+        val json = """
+            {"success":true,"data":{"account":"michal","device_id":"device-token-123",
+             "ik_message":"x","is_portal_port":false,"sid":"abc","synotoken":"t"}}
+        """.trimIndent()
+
         val data = SynoParsers.envelope(json)
 
         assertEquals("device-token-123", SynoParsers.parseDeviceId(data))
-        assertNull(SynoParsers.parseDeviceId(SynoParsers.envelope("""{"success":true,"data":{"sid":"a"}}""")))
+    }
+
+    @Test
+    fun `still accepts the older did field name`() {
+        val json = """{"success":true,"data":{"sid":"abc","did":"legacy-token"}}"""
+
+        assertEquals("legacy-token", SynoParsers.parseDeviceId(SynoParsers.envelope(json)))
+    }
+
+    @Test
+    fun `reports no device token when the NAS did not issue one`() {
+        val json = """{"success":true,"data":{"account":"michal","sid":"abc","synotoken":"t"}}"""
+
+        assertNull(SynoParsers.parseDeviceId(SynoParsers.envelope(json)))
     }
 
     @Test
