@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Keys passed to View.setTag(int, Object) must be application resource ids,
+        otherwise the framework throws IllegalArgumentException.
+    -->
+    <item name="slideshow_bitmap_tag" type="id" />
+</resources>

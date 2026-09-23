@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Polish has three plural categories for counting: 1 zdjęcie, 2-4 zdjęcia,
+        5+ zdjęć (with 12-14 always taking the "many" form).
+    -->
+    <plurals name="photo_count">
+        <item quantity="one">%1$d zdjęcie</item>
+        <item quantity="few">%1$d zdjęcia</item>
+        <item quantity="many">%1$d zdjęć</item>
+        <item quantity="other">%1$d zdjęcia</item>
+    </plurals>
+
+    <plurals name="imported_photos">
+        <item quantity="one">Zaimportowano %1$d zdjęcie</item>
+        <item quantity="few">Zaimportowano %1$d zdjęcia</item>
+        <item quantity="many">Zaimportowano %1$d zdjęć</item>
+        <item quantity="other">Zaimportowano %1$d zdjęcia</item>
+    </plurals>
+</resources>

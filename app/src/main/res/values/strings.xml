@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Photo Gallery Screensaver</string>
+
+    <!-- Main screen -->
+    <string name="main_subtitle">Show photos from Google Photos or your TV as the screensaver.</string>
+    <string name="main_active_source">Active photo source</string>
+    <string name="main_sources">Photo sources</string>
+    <string name="main_player">Slideshow settings</string>
+    <string name="main_google">Google Photos account</string>
+    <string name="main_preview">Preview</string>
+    <string name="main_set_screensaver">Open screensaver settings</string>
+    <string name="main_screensaver_hint">In the system settings pick \u201c%1$s\u201d as the screensaver.</string>
+    <string name="main_none_selected">No source selected</string>
+
+    <!-- Sources -->
+    <string name="sources_title">Photo sources</string>
+    <string name="sources_empty">No sources yet. Add photos from your TV or from Google Photos.</string>
+    <string name="sources_add_local">Add a folder from this device</string>
+    <string name="sources_add_google">Add photos from Google Photos</string>
+    <string name="sources_active">Active</string>
+    <string name="sources_activate">Set as active</string>
+    <string name="sources_remove">Remove</string>
+    <string name="sources_local_prefix">Device folder: %1$s</string>
+    <string name="sources_all_photos">All photos</string>
+    <string name="sources_pick_folder">Pick a folder</string>
+    <string name="sources_folder_empty">No photos found in this folder.</string>
+    <string name="sources_google_prefix">Google Photos: %1$s</string>
+    <string name="sources_google_unnamed">Selection</string>
+    <string name="sources_removed">Source removed</string>
+
+    <!-- Google Photos -->
+    <string name="google_title">Google Photos</string>
+    <string name="google_intro">Sign in with your own Google Cloud OAuth client, then pick an album or photos in Google Photos. Picked photos are downloaded to this device so the screensaver works offline.</string>
+    <string name="google_client_id">OAuth Client ID</string>
+    <string name="google_client_secret">OAuth Client secret</string>
+    <string name="google_client_saved">Credentials saved</string>
+    <string name="google_client_required">Enter the OAuth Client ID and secret first.</string>
+    <string name="google_client_id_invalid">That does not look like a Google OAuth client id. It should end with \u201c.apps.googleusercontent.com\u201d.</string>
+    <string name="google_sign_in">Sign in with Google</string>
+    <string name="google_sign_out">Sign out</string>
+    <string name="google_signed_in">Signed in</string>
+    <string name="google_device_hint">On your phone or computer open:\n%1$s\nand enter this code:</string>
+    <string name="google_waiting">Waiting for authorization\u2026</string>
+    <string name="google_auth_failed">Authorization failed: %1$s</string>
+    <string name="google_pick">Pick album or photos</string>
+    <string name="google_pick_hint">Open the link below (or scan the QR code) and select albums or photos in Google Photos.</string>
+    <string name="google_picker_waiting">Waiting for your selection in Google Photos\u2026</string>
+    <string name="google_importing">Downloading photos: %1$d / %2$d</string>
+    <string name="google_import_none">No photos were selected.</string>
+    <string name="google_need_login">Sign in with Google first.</string>
+    <string name="google_open_link">Open selection page</string>
+    <string name="google_picker_expired">The selection session expired. Start again.</string>
+    <string name="google_code_expired">The sign-in code expired. Please try again.</string>
+    <string name="google_import_failed">Download failed: %1$s</string>
+    <string name="google_credentials_help">Create an OAuth client of type \u201cTVs and Limited Input devices\u201d in Google Cloud Console and enable the Photos Picker API.</string>
+
+    <!-- Player settings -->
+    <string name="player_title">Slideshow settings</string>
+    <string name="player_interval">Show each photo for</string>
+    <string name="player_seconds">%1$d s</string>
+    <string name="player_order">Order</string>
+    <string name="player_order_shuffle">Shuffle</string>
+    <string name="player_order_sequential">In order</string>
+    <string name="player_transition">Transition</string>
+    <string name="player_transition_fade">Crossfade</string>
+    <string name="player_transition_slide">Slide</string>
+    <string name="player_ken_burns">Ken Burns motion</string>
+    <string name="player_fit">Scaling</string>
+    <string name="player_fit_contain">Fit whole photo</string>
+    <string name="player_fit_cover">Fill the screen</string>
+    <string name="player_clock">Show clock</string>
+    <string name="player_dim">Dim photos</string>
+
+    <!-- Preview / dream -->
+    <string name="preview_hint">Press BACK to stop the preview</string>
+    <string name="dream_empty_title">No photos to show</string>
+    <string name="dream_empty_body">Open %1$s and add a photo source.</string>
+    <string name="dream_unreadable">The photos in this source cannot be read. Pick another source in %1$s.</string>
+
+    <!-- Permissions -->
+    <string name="perm_needed">Access to photos on this device is required to list folders.</string>
+    <string name="perm_denied">Permission denied.</string>
+
+    <!-- Common -->
+    <string name="common_back">Back</string>
+    <string name="common_on">On</string>
+    <string name="common_off">Off</string>
+    <string name="common_saved">Saved</string>
+</resources>

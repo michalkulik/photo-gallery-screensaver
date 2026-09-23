@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="photo_count">
+        <item quantity="one">%1$d photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+
+    <plurals name="imported_photos">
+        <item quantity="one">Imported %1$d photo</item>
+        <item quantity="other">Imported %1$d photos</item>
+    </plurals>
+</resources>

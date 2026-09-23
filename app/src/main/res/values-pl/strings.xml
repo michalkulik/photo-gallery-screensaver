@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wygaszacz zdjęć</string>
+
+    <!-- Main screen -->
+    <string name="main_subtitle">Pokazuj zdjęcia z Google Photos lub z telewizora jako wygaszacz ekranu.</string>
+    <string name="main_active_source">Aktywne źródło zdjęć</string>
+    <string name="main_sources">Źródła zdjęć</string>
+    <string name="main_player">Ustawienia pokazu</string>
+    <string name="main_google">Konto Google Photos</string>
+    <string name="main_preview">Podgląd</string>
+    <string name="main_set_screensaver">Otwórz ustawienia wygaszacza</string>
+    <string name="main_screensaver_hint">W ustawieniach systemowych wybierz \u201e%1$s\u201d jako wygaszacz ekranu.</string>
+    <string name="main_none_selected">Nie wybrano źródła</string>
+
+    <!-- Sources -->
+    <string name="sources_title">Źródła zdjęć</string>
+    <string name="sources_empty">Brak źródeł. Dodaj zdjęcia z telewizora lub z Google Photos.</string>
+    <string name="sources_add_local">Dodaj folder z tego urządzenia</string>
+    <string name="sources_add_google">Dodaj zdjęcia z Google Photos</string>
+    <string name="sources_active">Aktywne</string>
+    <string name="sources_activate">Ustaw jako aktywne</string>
+    <string name="sources_remove">Usuń</string>
+    <string name="sources_local_prefix">Folder w telewizorze: %1$s</string>
+    <string name="sources_all_photos">Wszystkie zdjęcia</string>
+    <string name="sources_pick_folder">Wybierz folder</string>
+    <string name="sources_folder_empty">Nie znaleziono zdjęć w tym folderze.</string>
+    <string name="sources_google_prefix">Google Photos: %1$s</string>
+    <string name="sources_google_unnamed">Wybór zdjęć</string>
+    <string name="sources_removed">Źródło usunięte</string>
+
+    <!-- Google Photos -->
+    <string name="google_title">Google Photos</string>
+    <string name="google_intro">Zaloguj się własnym klientem OAuth z Google Cloud, a następnie wybierz album lub zdjęcia w Google Photos. Wybrane zdjęcia są pobierane na to urządzenie, więc wygaszacz działa offline.</string>
+    <string name="google_client_id">OAuth Client ID</string>
+    <string name="google_client_secret">OAuth Client secret</string>
+    <string name="google_client_saved">Dane klienta zapisane</string>
+    <string name="google_client_required">Najpierw podaj OAuth Client ID i secret.</string>
+    <string name="google_client_id_invalid">To nie wygląda na identyfikator klienta Google OAuth. Powinien kończyć się na \u201e.apps.googleusercontent.com\u201d.</string>
+    <string name="google_sign_in">Zaloguj się przez Google</string>
+    <string name="google_sign_out">Wyloguj</string>
+    <string name="google_signed_in">Zalogowano</string>
+    <string name="google_device_hint">Na telefonie lub komputerze otwórz:\n%1$s\ni wpisz ten kod:</string>
+    <string name="google_waiting">Czekam na autoryzację\u2026</string>
+    <string name="google_auth_failed">Autoryzacja nieudana: %1$s</string>
+    <string name="google_pick">Wybierz album lub zdjęcia</string>
+    <string name="google_pick_hint">Otwórz poniższy link (albo zeskanuj kod QR) i wybierz albumy lub zdjęcia w Google Photos.</string>
+    <string name="google_picker_waiting">Czekam na Twój wybór w Google Photos\u2026</string>
+    <string name="google_importing">Pobieram zdjęcia: %1$d / %2$d</string>
+    <string name="google_import_none">Nie wybrano żadnych zdjęć.</string>
+    <string name="google_need_login">Najpierw zaloguj się do Google.</string>
+    <string name="google_open_link">Otwórz stronę wyboru</string>
+    <string name="google_picker_expired">Sesja wyboru wygasła. Zacznij ponownie.</string>
+    <string name="google_code_expired">Kod logowania wygasł. Spróbuj ponownie.</string>
+    <string name="google_import_failed">Pobieranie nieudane: %1$s</string>
+    <string name="google_credentials_help">Utwórz klienta OAuth typu \u201eTVs and Limited Input devices\u201d w Google Cloud Console i włącz Photos Picker API.</string>
+
+    <!-- Player settings -->
+    <string name="player_title">Ustawienia pokazu</string>
+    <string name="player_interval">Czas wyświetlania zdjęcia</string>
+    <string name="player_seconds">%1$d s</string>
+    <string name="player_order">Kolejność</string>
+    <string name="player_order_shuffle">Losowo</string>
+    <string name="player_order_sequential">Po kolei</string>
+    <string name="player_transition">Przejście</string>
+    <string name="player_transition_fade">Przenikanie</string>
+    <string name="player_transition_slide">Przesuwanie</string>
+    <string name="player_ken_burns">Efekt Ken Burnsa</string>
+    <string name="player_fit">Skalowanie</string>
+    <string name="player_fit_contain">Całe zdjęcie</string>
+    <string name="player_fit_cover">Wypełnij ekran</string>
+    <string name="player_clock">Pokaż zegar</string>
+    <string name="player_dim">Przyciemnienie</string>
+
+    <!-- Preview / dream -->
+    <string name="preview_hint">Naciśnij WSTECZ, aby zakończyć podgląd</string>
+    <string name="dream_empty_title">Brak zdjęć do pokazania</string>
+    <string name="dream_empty_body">Otwórz %1$s i dodaj źródło zdjęć.</string>
+    <string name="dream_unreadable">Nie można odczytać zdjęć z tego źródła. Wybierz inne źródło w %1$s.</string>
+
+    <!-- Permissions -->
+    <string name="perm_needed">Dostęp do zdjęć na tym urządzeniu jest wymagany, aby wylistować foldery.</string>
+    <string name="perm_denied">Odmówiono uprawnień.</string>
+
+    <!-- Common -->
+    <string name="common_back">Wstecz</string>
+    <string name="common_on">Wł.</string>
+    <string name="common_off">Wył.</string>
+    <string name="common_saved">Zapisano</string>
+</resources>
