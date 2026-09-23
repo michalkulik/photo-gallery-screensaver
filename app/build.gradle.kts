@@ -1,8 +1,25 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
 }
+
+/**
+ * Signing values are read from `gradle.properties` or, for local release builds, from an untracked
+ * `signing.properties` file next to it. Keeping them out of the repository means a checkout never
+ * carries a signing key or its password.
+ */
+val signingProperties = Properties().apply {
+    val file = rootProject.file("signing.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun signingValue(key: String): String? =
+    (findProperty(key) as String?)?.takeIf { it.isNotBlank() }
+        ?: signingProperties.getProperty(key)?.takeIf { it.isNotBlank() }
 
 kotlin {
     compilerOptions {
@@ -26,10 +43,10 @@ android {
     }
 
     signingConfigs {
-        val keystoreFile = findProperty("keystore.file") as String?
-        val keystorePassword = findProperty("keystore.password") as String?
-        val keyAlias = findProperty("signing.key.alias") as String?
-        val keyPassword = findProperty("signing.key.password") as String?
+        val keystoreFile = signingValue("keystore.file")
+        val keystorePassword = signingValue("keystore.password")
+        val keyAlias = signingValue("signing.key.alias")
+        val keyPassword = signingValue("signing.key.password")
 
         if (keystoreFile != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
             create("release") {
