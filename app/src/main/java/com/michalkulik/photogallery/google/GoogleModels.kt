@@ -3,16 +3,7 @@ package com.michalkulik.photogallery.google
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Response of the OAuth 2.0 device authorization endpoint. */
-data class DeviceCode(
-    val deviceCode: String,
-    val userCode: String,
-    val verificationUrl: String,
-    val expiresInSeconds: Int,
-    val intervalSeconds: Int,
-)
-
-/** A successful token response (device flow or refresh). */
+/** A successful token response (sign-in or refresh). */
 data class TokenResponse(
     val accessToken: String,
     val refreshToken: String?,
@@ -38,33 +29,6 @@ data class PickedMediaItem(
 
 /** Fraction-friendly parser for every Google payload the app consumes. */
 object GoogleParsers {
-
-    fun parseDeviceCode(json: String): DeviceCode {
-        val root = JSONObject(json)
-        return DeviceCode(
-            deviceCode = root.getString("device_code"),
-            userCode = root.getString("user_code"),
-            verificationUrl = root.optString("verification_url", "https://www.google.com/device"),
-            expiresInSeconds = root.optInt("expires_in", 1800),
-            intervalSeconds = root.optInt("interval", 5).coerceAtLeast(1),
-        )
-    }
-
-    /** Returns the error code of a token endpoint response, or null when the call succeeded. */
-    fun tokenError(json: String): String? {
-        val root = runCatching { JSONObject(json) }.getOrNull() ?: return "invalid_response"
-        if (!root.has("error")) return null
-        return root.optString("error").ifBlank { root.optString("error_description", "unknown_error") }
-    }
-
-    fun parseToken(json: String): TokenResponse {
-        val root = JSONObject(json)
-        return TokenResponse(
-            accessToken = root.getString("access_token"),
-            refreshToken = root.optString("refresh_token").takeIf { it.isNotBlank() },
-            expiresInSeconds = root.optInt("expires_in", 3600),
-        )
-    }
 
     fun parseSession(json: String): PickerSession {
         val root = JSONObject(json)

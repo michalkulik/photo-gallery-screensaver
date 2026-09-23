@@ -69,14 +69,7 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString(KEY_ACTIVE, value).apply()
 
     // --- Google OAuth ----------------------------------------------------------------------
-
-    var clientId: String?
-        get() = prefs.getString(KEY_CLIENT_ID, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().putString(KEY_CLIENT_ID, value).apply()
-
-    var clientSecret: String?
-        get() = prefs.getString(KEY_CLIENT_SECRET, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().putString(KEY_CLIENT_SECRET, value).apply()
+    // Only tokens are stored here; the OAuth client secret stays on the relay service.
 
     var accessToken: String?
         get() = prefs.getString(KEY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() }
@@ -114,8 +107,6 @@ class Settings(context: Context) {
         const val KEY_SOURCES = "sources_json"
         const val KEY_ACTIVE = "active_source_id"
 
-        const val KEY_CLIENT_ID = "google_client_id"
-        const val KEY_CLIENT_SECRET = "google_client_secret"
         const val KEY_ACCESS_TOKEN = "google_access_token"
         const val KEY_REFRESH_TOKEN = "google_refresh_token"
         const val KEY_TOKEN_EXPIRY = "google_token_expiry"

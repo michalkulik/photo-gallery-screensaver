@@ -20,10 +20,20 @@ The only supported way for an app like this to reach photos a user already has i
 2. the user selects albums or photos in Google Photos on a phone or computer,
 3. the app downloads the selection to the TV so the screensaver works offline.
 
+Sign-in needs a small **OAuth relay** (in [`server/`](server/)) because the TV cannot sign in to
+Google by itself:
+
+* Google's **device flow** only allows OpenID, Drive and YouTube scopes — asking it for the Photos
+  Picker scope returns `invalid device flow scope`.
+* The TV has **no browser**, and Google **blocks OAuth inside a WebView**.
+
+So the TV shows a QR code, you sign in on your phone through the relay, and the TV collects the
+tokens. The relay handles OAuth only; the app still manages picker sessions itself.
+
 Consequences you should know about:
 
-* **You need your own OAuth client.** The client id/secret are entered in the app and stored on the
-  device. There is no bundled client, so the app never ships anyone's credentials.
+* **You host the relay, or point the app at someone's.** The OAuth client secret lives on the
+  relay and never in the APK. Override the address with `-Prelay.baseUrl=...`.
 * **"Recent highlights" is not available.** Google does not expose that collection to third-party
   apps. Albums and individual photos are what the Picker API offers.
 * **Picked photos are copied to the TV.** Google's photo URLs expire after about an hour, so the
@@ -78,31 +88,28 @@ ZXing (used to render the sign-in and picker QR codes).
 
 You only need this for the Google Photos sources; local folders work without any of it.
 
-### 1. Create a Google Cloud project
+### 1. Deploy the relay
+
+See [`server/README.md`](server/README.md). It needs a public HTTPS URL, because Google requires an
+`https` redirect target.
+
+### 2. Create a Google Cloud project and a web OAuth client
 
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create a project.
 2. Enable the **Photos Picker API** for that project.
-
-### 2. Create an OAuth client for a TV
-
-1. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID**.
-2. Application type: **TVs and Limited Input devices**.
-3. Copy the generated **Client ID** and **Client secret**.
-
-This client type is what makes the sign-in work on a TV: instead of a browser redirect, Google
-shows a short code that you type on your phone at `google.com/device`.
+3. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID**.
+4. Application type: **Web application** — not "TVs and Limited Input devices", which cannot
+   request the Picker scope.
+5. Add the authorised redirect URI: `https://<your-relay-host>/oauth/callback`.
+6. Put the client id and secret into the relay's `relay.env` and restart the service.
 
 > While the OAuth consent screen is in **Testing** mode, only accounts added under **Test users**
 > can sign in. Add your Google account there, or publish the app.
 
-### 3. Enter the credentials on the TV
+### 3. Sign in on the TV
 
-Open the app → **Google Photos account** → set **OAuth Client ID** and **OAuth Client secret** →
-**Sign in with Google**. A code and a QR code appear; confirm on your phone. Then use
-**Pick album or photos** to import a selection.
-
-Changing the client id or secret automatically signs you out, because a refresh token is bound to
-the client that issued it.
+Open the app → **Google Photos account** → **Sign in with Google**. Scan the QR code with your
+phone and confirm. Then use **Pick album or photos** to import a selection.
 
 ---
 
@@ -178,7 +185,7 @@ use it as a screensaver again — Android will not start a force-stopped package
 ui/       D-pad TV screens built in code (no layout XML)
 dream/    PhotoDreamService + SlideshowView, shared with the in-app preview
 data/     PhotoSource model, MediaStore access, Google photo cache
-google/   OAuth device flow, Photos Picker API client, importer
+google/   OAuth relay client, Photos Picker API client, importer
 core/     Settings (SharedPreferences) and a small service locator
 ```
 

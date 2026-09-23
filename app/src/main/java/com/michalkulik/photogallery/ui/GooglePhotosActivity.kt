@@ -5,7 +5,7 @@ import com.michalkulik.photogallery.R
 import com.michalkulik.photogallery.data.PhotoRepository
 import com.michalkulik.photogallery.data.PhotoSource
 import com.michalkulik.photogallery.data.SourceKind
-import com.michalkulik.photogallery.google.looksLikeGoogleClientId
+import com.michalkulik.photogallery.google.RelayClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,9 +15,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * Google Photos on a TV without a browser:
- * 1. the user pastes an OAuth client (type "TVs and Limited Input devices"),
- * 2. signs in with a code typed on a phone (device flow),
- * 3. picks albums/photos in Google Photos through the Picker API,
+ * 1. the TV shows a QR code; the user signs in on their phone through the OAuth relay,
+ * 2. the TV collects the tokens from the relay,
+ * 3. the user picks albums/photos in Google Photos through the Picker API,
  * 4. the selection is downloaded to the device for offline playback.
  */
 class GooglePhotosActivity : TvActivity() {
@@ -27,43 +27,9 @@ class GooglePhotosActivity : TvActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun buildContent(container: LinearLayout) {
-        val settings = graph.settings
         val auth = graph.auth
 
         TvUi.body(container, getString(R.string.google_intro))
-
-        TvUi.section(container, getString(R.string.google_client_id))
-        TvUi.body(container, getString(R.string.google_credentials_help))
-        TvUi.row(
-            container,
-            getString(R.string.google_client_id),
-            subtitle = settings.clientId?.let { truncate(it) } ?: MISSING,
-            onClick = {
-                Dialogs.input(this, getString(R.string.google_client_id), settings.clientId.orEmpty()) { entered ->
-                    val value = entered.trim()
-                    graph.auth.setCredentials(value, settings.clientSecret.orEmpty())
-                    if (value.isNotEmpty() && !looksLikeGoogleClientId(value)) {
-                        Dialogs.message(
-                            this,
-                            getString(R.string.google_client_id),
-                            getString(R.string.google_client_id_invalid),
-                        )
-                    }
-                    rebuild()
-                }
-            },
-        )
-        TvUi.row(
-            container,
-            getString(R.string.google_client_secret),
-            subtitle = if (settings.clientSecret != null) MASKED else MISSING,
-            onClick = {
-                Dialogs.input(this, getString(R.string.google_client_secret), settings.clientSecret.orEmpty(), secret = true) { entered ->
-                    graph.auth.setCredentials(settings.clientId.orEmpty(), entered.trim())
-                    rebuild()
-                }
-            },
-        )
 
         TvUi.section(container, getString(R.string.main_google))
         if (auth.isSignedIn()) {
@@ -74,7 +40,11 @@ class GooglePhotosActivity : TvActivity() {
                 rebuild()
             }
         } else {
-            TvUi.row(container, getString(R.string.google_sign_in)) { startSignIn() }
+            TvUi.row(
+                container,
+                getString(R.string.google_sign_in),
+                subtitle = getString(R.string.google_sign_in_hint),
+            ) { startSignIn() }
         }
 
         val googleSources = graph.repository.sources().filter { it.kind == SourceKind.GOOGLE }
@@ -95,35 +65,33 @@ class GooglePhotosActivity : TvActivity() {
         }
     }
 
-    // --- Sign in (OAuth 2.0 device flow) ---------------------------------------------------
+    // --- Sign in through the relay ---------------------------------------------------------
 
     private fun startSignIn() {
         val auth = graph.auth
-        if (!auth.hasCredentials()) {
-            Dialogs.message(this, getString(R.string.google_sign_in), getString(R.string.google_client_required))
-            return
-        }
         val sheet = Sheet(this, getString(R.string.google_sign_in))
         sheet.setMessage(getString(R.string.google_waiting))
         sheet.showIndeterminate()
         sheet.show()
         scope.launch {
+            var session: RelayClient.Session? = null
             try {
-                val code = withContext(Dispatchers.IO) { auth.requestDeviceCode() }
-                sheet.setCode(code.userCode)
-                sheet.setMessage(getString(R.string.google_device_hint, code.verificationUrl))
-                sheet.setImage(withContext(Dispatchers.IO) { QrCode.bitmap(code.verificationUrl, QR_SIZE) })
-                val token = auth.awaitAuthorization(code)
+                session = withContext(Dispatchers.IO) { auth.beginSignIn() }
+                sheet.setCode(null)
+                sheet.setMessage(getString(R.string.google_scan_hint))
+                sheet.setImage(withContext(Dispatchers.IO) { QrCode.bitmap(session.authUrl, QR_SIZE) })
+                val signedIn = auth.awaitSignIn(session)
                 sheet.dismiss()
-                if (token == null) {
+                if (!signedIn) {
                     Dialogs.message(
                         this@GooglePhotosActivity,
                         getString(R.string.google_sign_in),
-                        getString(R.string.google_code_expired),
+                        getString(R.string.google_session_expired),
                     )
                 }
                 rebuild()
             } catch (error: Exception) {
+                session?.let { auth.cancelSignIn(it) }
                 sheet.dismiss()
                 Dialogs.message(
                     this@GooglePhotosActivity,
@@ -213,12 +181,7 @@ class GooglePhotosActivity : TvActivity() {
         super.onDestroy()
     }
 
-    private fun truncate(value: String): String =
-        if (value.length <= 24) value else value.take(12) + "\u2026" + value.takeLast(6)
-
     private companion object {
         const val QR_SIZE = 520
-        const val MISSING = "\u2014"
-        const val MASKED = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
     }
 }

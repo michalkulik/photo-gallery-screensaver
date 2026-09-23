@@ -6,6 +6,7 @@ import com.michalkulik.photogallery.data.PhotoRepository
 import com.michalkulik.photogallery.google.GoogleAuth
 import com.michalkulik.photogallery.google.GooglePhotosImporter
 import com.michalkulik.photogallery.google.PickerClient
+import com.michalkulik.photogallery.google.RelayClient
 
 /** Simple service locator; the app is small enough not to need a DI framework. */
 class AppGraph(context: Context) {
@@ -16,7 +17,9 @@ class AppGraph(context: Context) {
 
     val repository: PhotoRepository = PhotoRepository(context, settings, cache)
 
-    val auth: GoogleAuth = GoogleAuth(settings)
+    val relay: RelayClient = RelayClient()
+
+    val auth: GoogleAuth = GoogleAuth(settings, relay)
 
     val picker: PickerClient = PickerClient(auth)
 

@@ -31,16 +31,13 @@
 
     <!-- Google Photos -->
     <string name="google_title">Google Photos</string>
-    <string name="google_intro">Sign in with your own Google Cloud OAuth client, then pick an album or photos in Google Photos. Picked photos are downloaded to this device so the screensaver works offline.</string>
-    <string name="google_client_id">OAuth Client ID</string>
-    <string name="google_client_secret">OAuth Client secret</string>
-    <string name="google_client_saved">Credentials saved</string>
-    <string name="google_client_required">Enter the OAuth Client ID and secret first.</string>
-    <string name="google_client_id_invalid">That does not look like a Google OAuth client id. It should end with \u201c.apps.googleusercontent.com\u201d.</string>
+    <string name="google_intro">Sign in once on your phone, then pick albums or photos in Google Photos. Picked photos are downloaded to this device so the screensaver works offline.</string>
     <string name="google_sign_in">Sign in with Google</string>
+    <string name="google_sign_in_hint">Scan the QR code with your phone</string>
     <string name="google_sign_out">Sign out</string>
     <string name="google_signed_in">Signed in</string>
-    <string name="google_device_hint">On your phone or computer open:\n%1$s\nand enter this code:</string>
+    <string name="google_scan_hint">Scan the QR code with your phone and sign in to Google. The TV will continue automatically.</string>
+    <string name="google_session_expired">The sign-in session expired. Please try again.</string>
     <string name="google_waiting">Waiting for authorization\u2026</string>
     <string name="google_auth_failed">Authorization failed: %1$s</string>
     <string name="google_pick">Pick album or photos</string>
@@ -51,9 +48,7 @@
     <string name="google_need_login">Sign in with Google first.</string>
     <string name="google_open_link">Open selection page</string>
     <string name="google_picker_expired">The selection session expired. Start again.</string>
-    <string name="google_code_expired">The sign-in code expired. Please try again.</string>
     <string name="google_import_failed">Download failed: %1$s</string>
-    <string name="google_credentials_help">Create an OAuth client of type \u201cTVs and Limited Input devices\u201d in Google Cloud Console and enable the Photos Picker API.</string>
 
     <!-- Player settings -->
     <string name="player_title">Slideshow settings</string>

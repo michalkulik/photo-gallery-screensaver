@@ -35,11 +35,15 @@ android {
         applicationId = "com.michalkulik.photogallery"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "PHOTOS_SCOPE", "\"https://www.googleapis.com/auth/photospicker.mediaitems.readonly\"")
         buildConfigField("String", "PICKER_API_BASE", "\"https://photospicker.googleapis.com/v1\"")
+        // OAuth relay that performs the browser sign-in on the user's phone.
+        // Override with -Prelay.baseUrl=... to point at your own deployment.
+        val relayBaseUrl = (findProperty("relay.baseUrl") as String?)
+            ?: "https://screensaver.mkulik.eu"
+        buildConfigField("String", "RELAY_BASE_URL", "\"$relayBaseUrl\"")
     }
 
     signingConfigs {

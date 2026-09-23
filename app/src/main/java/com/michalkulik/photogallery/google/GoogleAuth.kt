@@ -1,88 +1,52 @@
 package com.michalkulik.photogallery.google
 
-import com.michalkulik.photogallery.BuildConfig
 import com.michalkulik.photogallery.core.Settings
-import com.michalkulik.photogallery.util.Http
 import com.michalkulik.photogallery.util.Logs
 import kotlinx.coroutines.delay
 
 /**
- * Google OAuth 2.0 for TVs and limited-input devices.
+ * Google sign-in for a TV that has no browser.
  *
- * The TV shows a short user code; the user types it on google.com/device. This avoids needing a
- * browser on the TV and gives the app a refresh token so the screensaver keeps working.
+ * Google's device flow (the "type a code on your phone" flow) only allows a small set of scopes
+ * and does not include the Photos Picker scope, and Google refuses OAuth inside a WebView. The app
+ * therefore hands the OAuth dance to a small relay service: the TV shows a QR code, the user signs
+ * in on their phone through a normal browser redirect, and the TV then collects the tokens.
+ *
+ * Only the refresh token is kept on the device. The client secret stays on the relay, which also
+ * performs the token refreshes, so the app never ships a secret.
  */
-class GoogleAuth(private val settings: Settings) {
-
-    fun hasCredentials(): Boolean = settings.clientId != null && settings.clientSecret != null
+class GoogleAuth(private val settings: Settings, private val relay: RelayClient) {
 
     fun isSignedIn(): Boolean = settings.isSignedIn()
 
-    /**
-     * Stores new OAuth credentials and drops any existing tokens: a refresh token is bound to the
-     * client that requested it, so keeping it after the credentials change only leads to
-     * confusing `invalid_grant` failures later.
-     */
-    fun setCredentials(clientId: String, clientSecret: String) {
-        val changed = settings.clientId != clientId || settings.clientSecret != clientSecret
-        settings.clientId = clientId
-        settings.clientSecret = clientSecret
-        if (changed) {
-            settings.clearTokens()
-        }
-    }
-
-    /** Step 1: ask Google for a user code to display on screen. */
-    fun requestDeviceCode(): DeviceCode {
-        val clientId = requireNotNull(settings.clientId) { "OAuth Client ID is not configured" }
-        val result = Http.postForm(
-            DEVICE_CODE_ENDPOINT,
-            mapOf(
-                "client_id" to clientId,
-                "scope" to BuildConfig.PHOTOS_SCOPE,
-            ),
-        )
-        if (!result.isSuccess) {
-            throw GoogleApiException("device_code_request_failed (${result.code}) ${result.body.take(300)}")
-        }
-        return GoogleParsers.parseDeviceCode(result.body)
-    }
+    /** Creates a sign-in session; [RelayClient.Session.authUrl] is what the user opens. */
+    fun beginSignIn(): RelayClient.Session = relay.createSession()
 
     /**
-     * Step 2: poll until the user approves on their phone.
-     * Returns null when the code expired instead of throwing, so the UI can offer a retry.
+     * Polls the relay until the user finishes signing in on their phone.
+     * Returns false when the session expired instead of throwing, so the UI can offer a retry.
      */
-    suspend fun awaitAuthorization(code: DeviceCode): TokenResponse? {
-        val clientId = requireNotNull(settings.clientId) { "OAuth Client ID is not configured" }
-        val clientSecret = requireNotNull(settings.clientSecret) { "OAuth Client Secret is not configured" }
-        var intervalMs = code.intervalSeconds * 1000L
-        val deadline = System.currentTimeMillis() + code.expiresInSeconds * 1000L
-
+    suspend fun awaitSignIn(session: RelayClient.Session): Boolean {
+        val deadline = System.currentTimeMillis() + SIGN_IN_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            delay(intervalMs)
-            val result = Http.postForm(
-                TOKEN_ENDPOINT,
-                mapOf(
-                    "client_id" to clientId,
-                    "client_secret" to clientSecret,
-                    "device_code" to code.deviceCode,
-                    "grant_type" to DEVICE_GRANT_TYPE,
-                ),
-            )
-            if (result.isSuccess) {
-                val token = GoogleParsers.parseToken(result.body)
-                store(token)
-                return token
-            }
-            when (GoogleParsers.tokenError(result.body)) {
-                "authorization_pending" -> Unit
-                "slow_down" -> intervalMs += 5000L
-                "access_denied" -> throw GoogleApiException("access_denied")
-                "expired_token" -> return null
-                else -> throw GoogleApiException("token_error: ${result.body.take(300)}")
+            delay(session.pollIntervalSeconds * 1000L)
+            when (val poll = relay.poll(session.id)) {
+                is RelayClient.Poll.Ready -> {
+                    store(poll.accessToken, poll.refreshToken, poll.expiresInSeconds)
+                    // The tokens are safe on the device now, so the relay can forget them.
+                    runCatching { relay.deleteSession(session.id) }
+                    return true
+                }
+                is RelayClient.Poll.Failed -> throw GoogleApiException(poll.message)
+                RelayClient.Poll.Expired -> return false
+                RelayClient.Poll.Pending -> Unit
             }
         }
-        return null
+        return false
+    }
+
+    fun cancelSignIn(session: RelayClient.Session) {
+        runCatching { relay.deleteSession(session.id) }
     }
 
     /** Returns a usable access token, refreshing it when it is close to expiring. */
@@ -96,54 +60,40 @@ class GoogleAuth(private val settings: Settings) {
     }
 
     private fun refreshAccessToken(): String? {
-        val clientId = settings.clientId ?: return null
-        val clientSecret = settings.clientSecret ?: return null
         val refreshToken = settings.refreshToken ?: return null
-        val result = Http.postForm(
-            TOKEN_ENDPOINT,
-            mapOf(
-                "client_id" to clientId,
-                "client_secret" to clientSecret,
-                "refresh_token" to refreshToken,
-                "grant_type" to "refresh_token",
-            ),
-        )
-        if (!result.isSuccess) {
-            Logs.w("Token refresh failed (${result.code}): ${result.body.take(300)}")
-            // An invalid_grant means the user revoked access; force a fresh sign-in.
-            if (GoogleParsers.tokenError(result.body) == "invalid_grant") {
+        return try {
+            val token = relay.refresh(refreshToken)
+            if (token == null) {
+                // invalid_grant: the user revoked access, so a fresh sign-in is required.
+                Logs.w("Refresh token rejected, signing out")
                 settings.clearTokens()
+                null
+            } else {
+                store(token.accessToken, null, token.expiresInSeconds)
+                token.accessToken
             }
-            return null
+        } catch (error: Exception) {
+            // A network hiccup must not throw away a perfectly good refresh token.
+            Logs.w("Token refresh failed", error)
+            null
         }
-        val token = GoogleParsers.parseToken(result.body)
-        store(token)
-        return token.accessToken
     }
 
-    private fun store(token: TokenResponse) {
-        settings.accessToken = token.accessToken
-        if (token.refreshToken != null) {
-            settings.refreshToken = token.refreshToken
+    private fun store(accessToken: String, refreshToken: String?, expiresInSeconds: Int) {
+        settings.accessToken = accessToken
+        if (refreshToken != null) {
+            settings.refreshToken = refreshToken
         }
-        settings.tokenExpiryMillis = System.currentTimeMillis() + token.expiresInSeconds * 1000L
+        settings.tokenExpiryMillis = System.currentTimeMillis() + expiresInSeconds * 1000L
     }
 
     fun signOut() = settings.clearTokens()
 
     private companion object {
-        const val DEVICE_CODE_ENDPOINT = "https://oauth2.googleapis.com/device/code"
-        const val TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-        const val DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+        /** A little longer than the relay's own session lifetime. */
+        const val SIGN_IN_TIMEOUT_MS = 16 * 60 * 1000L
     }
 }
-
-/** Google client ids always carry this suffix; used only to warn about obvious typos. */
-private const val CLIENT_ID_SUFFIX = ".apps.googleusercontent.com"
-
-/** Cheap sanity check so a mistyped client id is caught before an OAuth round trip. */
-fun looksLikeGoogleClientId(value: String): Boolean =
-    value.endsWith(CLIENT_ID_SUFFIX) && value.length > CLIENT_ID_SUFFIX.length
 
 /** Raised for OAuth/Picker failures that should be shown to the user. */
 class GoogleApiException(message: String) : Exception(message)

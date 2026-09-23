@@ -6,63 +6,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Covers parsing of the Google OAuth and Photos Picker payloads. */
+/** Covers parsing of the Google Photos Picker payloads. */
 class GoogleParsersTest {
-
-    @Test
-    fun `parses a device code response`() {
-        val json = """
-            {"device_code":"dev-code","user_code":"ABCD-EFGH",
-             "verification_url":"https://www.google.com/device",
-             "expires_in":1800,"interval":5}
-        """.trimIndent()
-
-        val code = GoogleParsers.parseDeviceCode(json)
-
-        assertEquals("dev-code", code.deviceCode)
-        assertEquals("ABCD-EFGH", code.userCode)
-        assertEquals("https://www.google.com/device", code.verificationUrl)
-        assertEquals(1800, code.expiresInSeconds)
-        assertEquals(5, code.intervalSeconds)
-    }
-
-    @Test
-    fun `falls back to sane defaults when optional fields are missing`() {
-        val code = GoogleParsers.parseDeviceCode("""{"device_code":"d","user_code":"U","expires_in":60}""")
-
-        assertEquals("https://www.google.com/device", code.verificationUrl)
-        assertEquals(5, code.intervalSeconds)
-    }
-
-    @Test
-    fun `never polls faster than one second`() {
-        val code = GoogleParsers.parseDeviceCode(
-            """{"device_code":"d","user_code":"U","expires_in":60,"interval":0}""",
-        )
-
-        assertEquals(1, code.intervalSeconds)
-    }
-
-    @Test
-    fun `reports the error code of a failed token call`() {
-        assertEquals("authorization_pending", GoogleParsers.tokenError("""{"error":"authorization_pending"}"""))
-        assertEquals("bad", GoogleParsers.tokenError("""{"error":"bad","error_description":"nope"}"""))
-        assertNull(GoogleParsers.tokenError("""{"access_token":"at","expires_in":3600}"""))
-        assertEquals("invalid_response", GoogleParsers.tokenError("not json"))
-    }
-
-    @Test
-    fun `parses a token response with and without a refresh token`() {
-        val withRefresh = GoogleParsers.parseToken(
-            """{"access_token":"at","refresh_token":"rt","expires_in":3600,"token_type":"Bearer"}""",
-        )
-        assertEquals("at", withRefresh.accessToken)
-        assertEquals("rt", withRefresh.refreshToken)
-        assertEquals(3600, withRefresh.expiresInSeconds)
-
-        val withoutRefresh = GoogleParsers.parseToken("""{"access_token":"at2","expires_in":100}""")
-        assertNull(withoutRefresh.refreshToken)
-    }
 
     @Test
     fun `parses a picker session and its polling interval`() {
