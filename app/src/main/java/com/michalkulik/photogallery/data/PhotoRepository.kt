@@ -171,6 +171,9 @@ class PhotoRepository(
                         dateAdded = item.timeSeconds,
                         cacheKey = "syno-${source.ref}-${item.id}",
                         allowInsecureTls = config.ignoreCertificate,
+                        // The two spaces have separate download APIs, so keep the other one
+                        // ready in case the item's space was read wrongly.
+                        fallbackUri = syno.alternativeImageUrl(config, session, item),
                     )
                 }
             }

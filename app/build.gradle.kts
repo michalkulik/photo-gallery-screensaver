@@ -35,8 +35,8 @@ android {
         applicationId = "com.michalkulik.photogallery"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 5
-        versionName = "1.2.1"
+        versionCode = 6
+        versionName = "1.2.2"
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "PICKER_API_BASE", "\"https://photospicker.googleapis.com/v1\"")
         // OAuth relay that performs the browser sign-in on the user's phone.

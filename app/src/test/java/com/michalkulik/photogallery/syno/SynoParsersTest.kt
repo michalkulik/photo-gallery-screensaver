@@ -88,6 +88,27 @@ class SynoParsersTest {
     }
 
     @Test
+    fun `tells the shared space from the personal one`() {
+        // The two spaces have separate download APIs and neither serves the other's photos, so
+        // reading this wrongly makes every photo undecodable. Verified against the NAS: shared
+        // items report owner 0, personal items report the owning user's id.
+        val json = """
+            {"success":true,"data":{"list":[
+              {"id":1,"type":"photo","owner_user_id":0},
+              {"id":2,"type":"photo","owner_user_id":1},
+              {"id":3,"type":"photo"}
+            ]}}
+        """.trimIndent()
+
+        val items = SynoParsers.parseItems(SynoParsers.envelope(json))
+
+        assertTrue("an owner of 0 means the shared space", items[0].sharedSpace)
+        assertFalse("a real owner means the personal space", items[1].sharedSpace)
+        // Without the field we cannot tell, so it defaults to the personal space.
+        assertFalse(items[2].sharedSpace)
+    }
+
+    @Test
     fun `rejects a body that is not json at all`() {
         val error = runCatching { SynoParsers.envelope("<html>403</html>") }.exceptionOrNull()
 

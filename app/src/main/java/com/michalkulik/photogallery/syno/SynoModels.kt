@@ -39,6 +39,15 @@ data class SynoItem(
     val filename: String,
     val timeSeconds: Long,
     val isVideo: Boolean,
+    /**
+     * True when the photo lives in the shared space.
+     *
+     * The two spaces have separate download APIs and neither serves the other's photos: asking
+     * the wrong one answers error 117, which the slideshow can only report as "no photos". An
+     * album in the personal space can still hold shared photos, so this cannot be inferred from
+     * the album.
+     */
+    val sharedSpace: Boolean,
 ) {
     /**
      * The `SYNO.Foto.Download` cache key. Synology requires the caller to pass back the
@@ -182,6 +191,9 @@ object SynoParsers {
                 filename = filename.ifBlank { "item-$id" },
                 timeSeconds = item.optLong("time", 0L),
                 isVideo = item.optInt("type", 0) != 0,
+                // Verified against the NAS: shared-space photos report owner 0, personal photos
+                // report the owning user's id.
+                sharedSpace = item.optInt("owner_user_id", -1) == 0,
             ).apply {
                 cacheKey = thumbnail?.optString("cache_key")?.takeIf { it.isNotBlank() }
             }

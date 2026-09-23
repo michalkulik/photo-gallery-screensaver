@@ -235,6 +235,27 @@ class SynoClient {
         session: SynoSession,
         item: SynoItem,
         size: String = SIZE_TV,
+    ): String = downloadUrl(config, session, item, size, sharedSpace = item.sharedSpace)
+
+    /**
+     * The same image requested from the other space.
+     *
+     * The two spaces have separate download APIs and neither serves the other's photos, so this
+     * is the fallback for the case where [SynoItem.sharedSpace] was read wrongly.
+     */
+    fun alternativeImageUrl(
+        config: SynoConfig,
+        session: SynoSession,
+        item: SynoItem,
+        size: String = SIZE_TV,
+    ): String = downloadUrl(config, session, item, size, sharedSpace = !item.sharedSpace)
+
+    private fun downloadUrl(
+        config: SynoConfig,
+        session: SynoSession,
+        item: SynoItem,
+        size: String,
+        sharedSpace: Boolean,
     ): String {
         val params = LinkedHashMap<String, String>()
         params["unit_id"] = "[${item.id}]"
@@ -243,7 +264,10 @@ class SynoClient {
         params["type"] = if (item.isVideo) "thumb" else "unit"
         item.cacheKey?.let { params["cache_key"] = it }
         params["_sid"] = session.sid
-        return url(config, "SYNO.Foto.Download", 2, "download", params)
+        // Shared photos are served by the team API and personal photos by the plain one; using
+        // the wrong one answers error 117 rather than returning anything.
+        val api = if (sharedSpace) "SYNO.FotoTeam.Download" else "SYNO.Foto.Download"
+        return url(config, api, 2, "download", params)
     }
 
     /** Quick reachability probe used by the setup screen. */

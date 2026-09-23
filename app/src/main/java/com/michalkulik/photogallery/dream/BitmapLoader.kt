@@ -92,29 +92,70 @@ object BitmapLoader {
             return target
         }
 
-        val download = File(directory, "$name.download")
-        val ok = Http.download(photo.uri, bearer = null, destination = download, insecure = photo.allowInsecureTls)
-        val downloadedSize = download.length()
-        if (!ok || downloadedSize == 0L) {
-            Logs.w("Remote download failed for $name ($downloadedSize bytes)")
-            download.delete()
-            return null
+        // The primary URL first, then the fallback. Synology serves shared and personal photos
+        // through different APIs, and the wrong one answers with a small JSON error rather than
+        // an image, so a wrong guess has to be recoverable rather than fatal.
+        val urls = listOfNotNull(photo.uri, photo.fallbackUri)
+        urls.forEachIndexed { index, url ->
+            val attempt = File(directory, "$name.${index}.download")
+            val ok = Http.download(url, bearer = null, destination = attempt,
+                                   insecure = photo.allowInsecureTls)
+            val size = attempt.length()
+            if (!ok || size == 0L) {
+                Logs.w("Remote download failed for $name from ${url.substringBefore('?')} ($size bytes)")
+                attempt.delete()
+                return@forEachIndexed
+            }
+            if (index > 0) {
+                Logs.d("Remote photo $name needed the fallback URL")
+            }
+            // A rejected request still answers 200 with a small JSON error, so the bytes have to
+            // be recognised before being trusted: accepting them produced a 38-byte "image" that
+            // only failed much later, as an undecodable photo.
+            if (!isZip(attempt) && !hasImageSignature(attempt)) {
+                Logs.w(
+                    "Remote photo $name is not an image: ${size} bytes " +
+                        "(${attempt.readBytes().take(80).toByteArray().decodeToString()})",
+                )
+                attempt.delete()
+                return@forEachIndexed
+            }
+            val zipped = isZip(attempt)
+            val extracted = if (zipped) unpackSingleEntry(attempt, target) else move(attempt, target)
+            attempt.delete()
+            if (extracted) {
+                Logs.d("Remote photo $name: $size bytes downloaded, ${target.length()} bytes ready")
+                trimCache(directory)
+                return target
+            }
+            Logs.w("Remote photo $name could not be extracted (zip=$zipped, $size bytes)")
         }
-
-        // Synology answers SYNO.Foto.Download with a ZIP archive holding the image, not with the
-        // image itself, so the bytes have to be unpacked before they can be decoded.
-        val zipped = isZip(download)
-        val extracted = if (zipped) unpackSingleEntry(download, target) else move(download, target)
-        download.delete()
-
-        if (!extracted) {
-            Logs.w("Remote photo $name could not be extracted (zip=$zipped, $downloadedSize bytes)")
-            return null
-        }
-        Logs.d("Remote photo $name: $downloadedSize bytes downloaded, ${target.length()} bytes ready")
-        trimCache(directory)
-        return target
+        return null
     }
+
+    /**
+     * True when the file starts with a known image signature.
+     *
+     * Synology wraps downloads in a ZIP, so that is checked separately; this covers the case
+     * where it hands back the image directly.
+     */
+    private fun hasImageSignature(file: File): Boolean = runCatching {
+        file.inputStream().use { stream ->
+            val head = ByteArray(12)
+            val read = stream.read(head)
+            if (read < 4) return@use false
+            val jpeg = head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte()
+            val png = head[0] == 0x89.toByte() && head[1] == 'P'.code.toByte() &&
+                head[2] == 'N'.code.toByte() && head[3] == 'G'.code.toByte()
+            val gif = head[0] == 'G'.code.toByte() && head[1] == 'I'.code.toByte() &&
+                head[2] == 'F'.code.toByte()
+            // WebP: "RIFF....WEBP", HEIC/AVIF: an ISO base media box with ftyp at offset 4.
+            val riff = read >= 12 && String(head, 0, 4) == "RIFF" &&
+                String(head, 8, 4) == "WEBP"
+            val isoMedia = read >= 12 && String(head, 4, 4) == "ftyp"
+            jpeg || png || gif || riff || isoMedia
+        }
+    }.getOrDefault(false)
 
     /**
      * Keeps the download cache inside a size budget.

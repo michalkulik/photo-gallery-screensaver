@@ -53,4 +53,11 @@ data class Photo(
      * Set for a NAS that is reached by IP while its certificate is issued for a hostname.
      */
     val allowInsecureTls: Boolean = false,
+    /**
+     * A second URL to try when [uri] does not return an image.
+     *
+     * Used for Synology photos: the shared and personal spaces have separate download APIs and
+     * neither serves the other's photos, so a wrong guess has to be recoverable.
+     */
+    val fallbackUri: String? = null,
 )

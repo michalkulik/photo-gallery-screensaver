@@ -12,7 +12,8 @@ import org.junit.Test
  */
 class SynoPagingTest {
 
-    private fun item(id: Int) = SynoItem(id = id, filename = "f$id", timeSeconds = 0, isVideo = false)
+    private fun item(id: Int) =
+        SynoItem(id = id, filename = "f$id", timeSeconds = 0, isVideo = false, sharedSpace = false)
 
     /** A fake NAS holding [total] photos, returning at most [pageCap] per request. */
     private fun fakeNas(total: Int, pageCap: Int = Int.MAX_VALUE): (Int, Int) -> SynoPaging.Page = { offset, limit ->

@@ -15,7 +15,17 @@ The app calls these, and nothing more:
 | `SYNO.API.Auth` | sign in / sign out |
 | `SYNO.Foto.Browse.Album` | the album list |
 | `SYNO.Foto.Browse.Item` | the photos in an album |
-| `SYNO.Foto.Download` | the image bytes |
+| `SYNO.Foto.Download` | image bytes from the personal space |
+| `SYNO.FotoTeam.Download` | image bytes from the shared space |
+
+Both download APIs are needed. The two spaces have separate ones and **neither serves the other's
+photos** — asking the wrong one answers error 117, which the slideshow can only report as "no
+photos". An album in the personal space can hold photos from the shared space, so which one an
+item needs cannot be told from the album.
+
+> Getting this wrong is easy and the symptom is misleading: omitting `SYNO.FotoTeam.Download`
+> made every photo of a shared-space album fail to load with no obvious cause. The app now also
+> checks that a download really returned an image, instead of trusting a 200 response.
 
 Everything else is refused: the DSM web UI, the Photos web UI, File Station, the package centre,
 user management, album mutations, and any other API. A stolen session id therefore cannot delete
