@@ -2,12 +2,42 @@
 <resources>
     <string name="app_name">Photo Gallery Screensaver</string>
 
+    <!-- Shared toggles -->
+    <string name="on">On</string>
+    <string name="off">Off</string>
+
+    <!-- Synology -->
+    <string name="syno_title">Synology Photos</string>
+    <string name="syno_intro">Connect to your DiskStation and pick an album. Photos are streamed from the NAS, so anything you add to the album shows up in the screensaver by itself.</string>
+    <string name="syno_server">Server</string>
+    <string name="syno_host">Address</string>
+    <string name="syno_port">Port</string>
+    <string name="syno_https">Use HTTPS</string>
+    <string name="syno_ignore_certificate">Ignore certificate errors</string>
+    <string name="syno_account">Account</string>
+    <string name="syno_password">Password</string>
+    <string name="syno_test">Connect and list albums</string>
+    <string name="syno_incomplete">Fill in the address, account and password first.</string>
+    <string name="syno_connecting">Connecting to the NAS\u2026</string>
+    <string name="syno_connected">Signed in as %1$s. Found %2$d albums.</string>
+    <string name="syno_albums">Albums on the NAS</string>
+    <string name="syno_all_photos">All photos</string>
+    <string name="syno_added">Added source: %1$s</string>
+    <string name="syno_err_credentials">Wrong account or password.</string>
+    <string name="syno_err_ip_blocked">The NAS has blocked this device after repeated failed sign-ins (Auto Block). Remove the blocked address in DSM under Control Panel \u25b8 Security \u25b8 Auto Block, then try again.</string>
+    <string name="syno_err_permission">That account is not allowed to use Synology Photos.</string>
+    <string name="syno_err_2fa">This account uses two-factor authentication, which is not supported yet. Create a dedicated account without it.</string>
+    <string name="syno_err_disabled">The account is disabled on the NAS.</string>
+    <string name="syno_err_not_a_nas">That address did not answer like a Synology NAS. Check the address and port.</string>
+    <string name="syno_err_generic">Connection failed: %1$s</string>
+
     <!-- Main screen -->
     <string name="main_subtitle">Show photos from Google Photos or your TV as the screensaver.</string>
     <string name="main_active_source">Active photo source</string>
     <string name="main_sources">Photo sources</string>
     <string name="main_player">Slideshow settings</string>
     <string name="main_google">Google Photos account</string>
+    <string name="main_syno">Synology NAS</string>
     <string name="main_preview">Preview</string>
     <string name="main_set_screensaver">Open screensaver settings</string>
     <string name="main_screensaver_hint">In the system settings pick \u201c%1$s\u201d as the screensaver.</string>
@@ -17,6 +47,7 @@
     <string name="sources_title">Photo sources</string>
     <string name="sources_empty">No sources yet. Add photos from your TV or from Google Photos.</string>
     <string name="sources_add_local">Add a folder from this device</string>
+    <string name="sources_add_syno">Add photos from a Synology NAS</string>
     <string name="sources_add_google">Add photos from Google Photos</string>
     <string name="sources_active">Active</string>
     <string name="sources_activate">Set as active</string>

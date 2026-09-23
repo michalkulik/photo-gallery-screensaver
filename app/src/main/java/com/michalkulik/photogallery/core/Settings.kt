@@ -6,6 +6,7 @@ import com.michalkulik.photogallery.dream.FitMode
 import com.michalkulik.photogallery.dream.PlayOrder
 import com.michalkulik.photogallery.dream.SlideshowSettings
 import com.michalkulik.photogallery.dream.Transition
+import com.michalkulik.photogallery.syno.SynoConfig
 
 /**
  * Single place that owns every persisted value: the slideshow settings, the list of photo
@@ -68,6 +69,51 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_ACTIVE, null)
         set(value) = prefs.edit().putString(KEY_ACTIVE, value).apply()
 
+    // --- Synology DiskStation -----------------------------------------------------------------
+
+    var synoHost: String?
+        get() = prefs.getString(KEY_SYNO_HOST, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_SYNO_HOST, value).apply()
+
+    var synoPort: Int
+        get() = prefs.getInt(KEY_SYNO_PORT, SynoConfig.DEFAULT_PORT)
+        set(value) = prefs.edit().putInt(KEY_SYNO_PORT, value).apply()
+
+    var synoSecure: Boolean
+        get() = prefs.getBoolean(KEY_SYNO_SECURE, true)
+        set(value) = prefs.edit().putBoolean(KEY_SYNO_SECURE, value).apply()
+
+    var synoIgnoreCertificate: Boolean
+        get() = prefs.getBoolean(KEY_SYNO_INSECURE_TLS, false)
+        set(value) = prefs.edit().putBoolean(KEY_SYNO_INSECURE_TLS, value).apply()
+
+    var synoAccount: String?
+        get() = prefs.getString(KEY_SYNO_ACCOUNT, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_SYNO_ACCOUNT, value).apply()
+
+    var synoPassword: String?
+        get() = prefs.getString(KEY_SYNO_PASSWORD, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_SYNO_PASSWORD, value).apply()
+
+    /** The stored NAS settings, or null when the user has not configured one yet. */
+    fun synoConfig(): SynoConfig? {
+        val host = synoHost ?: return null
+        val account = synoAccount ?: return null
+        val password = synoPassword ?: return null
+        return SynoConfig(
+            host = host,
+            port = synoPort,
+            secure = synoSecure,
+            account = account,
+            password = password,
+            ignoreCertificate = synoIgnoreCertificate,
+        )
+    }
+
+    fun clearSynoCredentials() {
+        prefs.edit().remove(KEY_SYNO_ACCOUNT).remove(KEY_SYNO_PASSWORD).apply()
+    }
+
     // --- Google OAuth ----------------------------------------------------------------------
     // Only tokens are stored here; the OAuth client secret stays on the relay service.
 
@@ -108,6 +154,13 @@ class Settings(context: Context) {
         const val KEY_ACTIVE = "active_source_id"
 
         const val KEY_ACCESS_TOKEN = "google_access_token"
+
+        const val KEY_SYNO_HOST = "syno_host"
+        const val KEY_SYNO_PORT = "syno_port"
+        const val KEY_SYNO_SECURE = "syno_secure"
+        const val KEY_SYNO_INSECURE_TLS = "syno_ignore_certificate"
+        const val KEY_SYNO_ACCOUNT = "syno_account"
+        const val KEY_SYNO_PASSWORD = "syno_password"
         const val KEY_REFRESH_TOKEN = "google_refresh_token"
         const val KEY_TOKEN_EXPIRY = "google_token_expiry"
     }

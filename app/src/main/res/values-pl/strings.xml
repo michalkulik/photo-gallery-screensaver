@@ -2,12 +2,42 @@
 <resources>
     <string name="app_name">Wygaszacz zdjęć</string>
 
+    <!-- Shared toggles -->
+    <string name="on">Włączone</string>
+    <string name="off">Wyłączone</string>
+
+    <!-- Synology -->
+    <string name="syno_title">Synology Photos</string>
+    <string name="syno_intro">Połącz się z DiskStation i wybierz album. Zdjęcia są przesyłane strumieniowo z serwera, więc nowe pozycje w albumie pojawią się w wygaszaczu samoczynnie.</string>
+    <string name="syno_server">Serwer</string>
+    <string name="syno_host">Adres</string>
+    <string name="syno_port">Port</string>
+    <string name="syno_https">Używaj HTTPS</string>
+    <string name="syno_ignore_certificate">Ignoruj błędy certyfikatu</string>
+    <string name="syno_account">Konto</string>
+    <string name="syno_password">Hasło</string>
+    <string name="syno_test">Połącz i pokaż albumy</string>
+    <string name="syno_incomplete">Najpierw podaj adres, konto i hasło.</string>
+    <string name="syno_connecting">Łączę się z serwerem\u2026</string>
+    <string name="syno_connected">Zalogowano jako %1$s. Znaleziono albumy: %2$d.</string>
+    <string name="syno_albums">Albumy na serwerze</string>
+    <string name="syno_all_photos">Wszystkie zdjęcia</string>
+    <string name="syno_added">Dodano źródło: %1$s</string>
+    <string name="syno_err_credentials">Błędne konto lub hasło.</string>
+    <string name="syno_err_ip_blocked">Serwer zablokował to urządzenie po kilku nieudanych próbach logowania (Auto Block). Usuń zablokowany adres w DSM: Panel sterowania \u25b8 Zabezpieczenia \u25b8 Auto Block, a potem spróbuj ponownie.</string>
+    <string name="syno_err_permission">To konto nie ma dostępu do Synology Photos.</string>
+    <string name="syno_err_2fa">To konto używa weryfikacji dwuetapowej, która nie jest jeszcze obsługiwana. Utwórz osobne konto bez niej.</string>
+    <string name="syno_err_disabled">Konto jest wyłączone na serwerze.</string>
+    <string name="syno_err_not_a_nas">Ten adres nie odpowiedział jak serwer Synology. Sprawdź adres i port.</string>
+    <string name="syno_err_generic">Połączenie nieudane: %1$s</string>
+
     <!-- Main screen -->
     <string name="main_subtitle">Pokazuj zdjęcia z Google Photos lub z telewizora jako wygaszacz ekranu.</string>
     <string name="main_active_source">Aktywne źródło zdjęć</string>
     <string name="main_sources">Źródła zdjęć</string>
     <string name="main_player">Ustawienia pokazu</string>
     <string name="main_google">Konto Google Photos</string>
+    <string name="main_syno">Serwer Synology</string>
     <string name="main_preview">Podgląd</string>
     <string name="main_set_screensaver">Otwórz ustawienia wygaszacza</string>
     <string name="main_screensaver_hint">W ustawieniach systemowych wybierz \u201e%1$s\u201d jako wygaszacz ekranu.</string>
@@ -17,6 +47,7 @@
     <string name="sources_title">Źródła zdjęć</string>
     <string name="sources_empty">Brak źródeł. Dodaj zdjęcia z telewizora lub z Google Photos.</string>
     <string name="sources_add_local">Dodaj folder z tego urządzenia</string>
+    <string name="sources_add_syno">Dodaj zdjęcia z serwera Synology</string>
     <string name="sources_add_google">Dodaj zdjęcia z Google Photos</string>
     <string name="sources_active">Aktywne</string>
     <string name="sources_activate">Ustaw jako aktywne</string>

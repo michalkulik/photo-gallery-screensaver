@@ -1,0 +1,138 @@
+package com.michalkulik.photogallery.syno
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** Covers the Synology WebAPI envelope and payload parsing. */
+class SynoParsersTest {
+
+    @Test
+    fun `unwraps a successful envelope`() {
+        val data = SynoParsers.envelope("""{"success":true,"data":{"total":3}}""")
+
+        assertEquals(3, data.optInt("total"))
+    }
+
+    @Test
+    fun `turns a failure envelope into an actionable message`() {
+        val error = runCatching {
+            SynoParsers.envelope("""{"success":false,"error":{"code":400}}""")
+        }.exceptionOrNull()
+
+        assertTrue(error is SynoException)
+        assertTrue(error!!.message!!.contains("wrong_account_or_password"))
+    }
+
+    @Test
+    fun `reports an auto-blocked address distinctly from bad credentials`() {
+        // 407 is the Auto Block response; mixing it up with a wrong password would send the
+        // user chasing the wrong problem.
+        assertEquals("ip_blocked", SynoParsers.describeError(407))
+        assertEquals("wrong_account_or_password", SynoParsers.describeError(400))
+        assertEquals("session_expired", SynoParsers.describeError(119))
+        assertEquals("two_factor_required", SynoParsers.describeError(403))
+    }
+
+    @Test
+    fun `rejects a body that is not json at all`() {
+        val error = runCatching { SynoParsers.envelope("<html>403</html>") }.exceptionOrNull()
+
+        assertTrue(error is SynoException)
+        assertTrue(error!!.message!!.contains("invalid_response"))
+    }
+
+    @Test
+    fun `parses albums and skips entries without an id`() {
+        val json = """
+            {"success":true,"data":{"total":2,"list":[
+              {"id":7,"name":"Holidays","item_count":42},
+              {"id":0,"name":"broken"},
+              {"id":9,"name":"Family","item_count":5,"shared":true}
+            ]}}
+        """.trimIndent()
+
+        val albums = SynoParsers.parseAlbums(SynoParsers.envelope(json))
+
+        assertEquals(2, albums.size)
+        assertEquals(7, albums[0].id)
+        assertEquals("Holidays", albums[0].name)
+        assertEquals(42, albums[0].itemCount)
+        assertFalse(albums[0].isShared)
+        assertTrue(albums[1].isShared)
+    }
+
+    @Test
+    fun `parses items and keeps the thumbnail cache key`() {
+        val json = """
+            {"success":true,"data":{"list":[
+              {"id":11,"type":0,"time":1700000000,
+               "additional":{"thumbnail":{"cache_key":"abc123"},"filename":{"name":"a.jpg"}}},
+              {"id":12,"type":1,"time":1700000001,
+               "additional":{"thumbnail":{"cache_key":"def456"}}}
+            ]}}
+        """.trimIndent()
+
+        val items = SynoParsers.parseItems(SynoParsers.envelope(json))
+
+        assertEquals(2, items.size)
+        assertEquals(11, items[0].id)
+        assertEquals("a.jpg", items[0].filename)
+        assertEquals("abc123", items[0].cacheKey)
+        assertFalse(items[0].isVideo)
+        assertTrue(items[1].isVideo)
+        // Without the cache key every later download of this image would be rejected.
+        assertEquals("def456", items[1].cacheKey)
+    }
+
+    @Test
+    fun `falls back to a readable name when the filename is absent`() {
+        val json = """{"success":true,"data":{"list":[{"id":5,"additional":{"thumbnail":{}}}]}}"""
+
+        val items = SynoParsers.parseItems(SynoParsers.envelope(json))
+
+        assertEquals("item-5", items[0].filename)
+        assertNull(items[0].cacheKey)
+    }
+
+    @Test
+    fun `reads api versions from the discovery payload`() {
+        val json = """
+            {"success":true,"data":{
+              "SYNO.API.Auth":{"maxVersion":7,"minVersion":1,"path":"entry.cgi"},
+              "SYNO.Foto.Browse.Item":{"maxVersion":6,"minVersion":1,"path":"entry.cgi"}
+            }}
+        """.trimIndent()
+
+        val versions = SynoParsers.parseApiInfo(SynoParsers.envelope(json))
+
+        assertEquals(7, versions["SYNO.API.Auth"])
+        assertEquals(6, versions["SYNO.Foto.Browse.Item"])
+    }
+
+    @Test
+    fun `extracts the public key needed for password encryption`() {
+        val json = """{"success":true,"data":{"public_key":"MIIBIjANBg","server_time":1}}"""
+
+        assertEquals("MIIBIjANBg", SynoParsers.parseEncryption(SynoParsers.envelope(json)))
+        assertNull(SynoParsers.parseEncryption(SynoParsers.envelope("""{"success":true,"data":{}}""")))
+    }
+
+    @Test
+    fun `builds the base url from host and scheme`() {
+        val https = SynoConfig(host = "nas.local", account = "a", password = "b")
+        assertEquals("https://nas.local:5001", https.baseUrl)
+
+        val plain = SynoConfig(host = "192.168.1.5", port = 5000, secure = false, account = "a", password = "b")
+        assertEquals("http://192.168.1.5:5000", plain.baseUrl)
+    }
+
+    @Test
+    fun `strips a scheme the user pasted into the address field`() {
+        val config = SynoConfig(host = "https://nas.local/", account = "a", password = "b")
+
+        assertEquals("https://nas.local:5001", config.baseUrl)
+    }
+}

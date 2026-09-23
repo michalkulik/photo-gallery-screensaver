@@ -79,6 +79,12 @@
             android:parentActivityName=".ui.SourcesActivity" />
 
         <activity
+            android:name=".ui.SynoPhotosActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:parentActivityName=".ui.SourcesActivity" />
+
+        <activity
             android:name=".ui.PlayerSettingsActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:exported="false"

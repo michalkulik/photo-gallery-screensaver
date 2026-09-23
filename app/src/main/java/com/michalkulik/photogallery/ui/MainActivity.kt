@@ -18,7 +18,8 @@ class MainActivity : TvActivity() {
         if (active == null) {
             TvUi.row(container, getString(R.string.main_none_selected))
         } else {
-            val count = runCatching { graph.repository.photosFor(active).size }.getOrDefault(active.photoCount)
+            // countForDisplay avoids a network round trip for NAS sources on every redraw.
+            val count = graph.repository.countForDisplay(active)
             TvUi.row(
                 container,
                 active.displayName(this),
@@ -29,6 +30,7 @@ class MainActivity : TvActivity() {
         TvUi.section(container, getString(R.string.main_sources))
         TvUi.row(container, getString(R.string.main_sources)) { open(SourcesActivity::class.java) }
         TvUi.row(container, getString(R.string.main_player)) { open(PlayerSettingsActivity::class.java) }
+        TvUi.row(container, getString(R.string.main_syno)) { open(SynoPhotosActivity::class.java) }
         TvUi.row(container, getString(R.string.main_google)) { open(GooglePhotosActivity::class.java) }
         TvUi.row(container, getString(R.string.main_preview)) { open(PreviewActivity::class.java) }
 

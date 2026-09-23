@@ -12,6 +12,7 @@ import java.util.Date
 fun PhotoSource.displayName(context: Context): String = when {
     kind == SourceKind.LOCAL && ref == LocalMedia.ALL_BUCKETS -> context.getString(R.string.sources_all_photos)
     kind == SourceKind.LOCAL -> name.ifBlank { ref }
+    kind == SourceKind.SYNO -> name.ifBlank { context.getString(R.string.syno_all_photos) }
     else -> name.ifBlank { context.getString(R.string.sources_google_unnamed) }
 }
 

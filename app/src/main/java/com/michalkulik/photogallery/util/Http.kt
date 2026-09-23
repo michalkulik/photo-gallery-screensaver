@@ -5,6 +5,14 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /** Result of a plain HTTP call: the status code plus the body (or an error message). */
 data class HttpResult(val code: Int, val body: String) {
@@ -30,7 +38,12 @@ object Http {
     fun postJson(url: String, json: String, bearer: String? = null): HttpResult =
         execute(url, "POST", json.toByteArray(Charsets.UTF_8), "application/json", bearer)
 
-    fun getJson(url: String, bearer: String? = null): HttpResult = execute(url, "GET", null, null, bearer)
+    /**
+     * @param insecure skips certificate and hostname validation. Needed for a NAS that is
+     *   reached by IP while its certificate is issued for a hostname.
+     */
+    fun getJson(url: String, bearer: String? = null, insecure: Boolean = false): HttpResult =
+        execute(url, "GET", null, null, bearer, insecure)
 
     fun delete(url: String, bearer: String? = null): HttpResult = execute(url, "DELETE", null, null, bearer)
 
@@ -40,6 +53,7 @@ object Http {
         body: ByteArray?,
         contentType: String?,
         bearer: String?,
+        insecure: Boolean = false,
     ): HttpResult {
         var connection: HttpURLConnection? = null
         return try {
@@ -51,6 +65,7 @@ object Http {
                 setRequestProperty("Accept", "application/json")
                 if (contentType != null) setRequestProperty("Content-Type", contentType)
                 if (bearer != null) setRequestProperty("Authorization", "Bearer $bearer")
+                if (insecure) relaxTls()
                 if (body != null) {
                     doOutput = true
                     setFixedLengthStreamingMode(body.size)
@@ -78,7 +93,7 @@ object Http {
      * Streams [url] into [destination]. Returns true only when the file was fully written,
      * so a truncated download never ends up in the photo cache.
      */
-    fun download(url: String, bearer: String?, destination: File): Boolean {
+    fun download(url: String, bearer: String?, destination: File, insecure: Boolean = false): Boolean {
         var connection: HttpURLConnection? = null
         return try {
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -87,6 +102,7 @@ object Http {
                 readTimeout = READ_TIMEOUT_MS
                 instanceFollowRedirects = true
                 if (bearer != null) setRequestProperty("Authorization", "Bearer $bearer")
+                if (insecure) relaxTls()
             }
             val code = connection.responseCode
             if (code !in 200..299) {
@@ -110,4 +126,32 @@ object Http {
             connection?.disconnect()
         }
     }
+
+    /**
+     * Turns off certificate and hostname validation for this connection only.
+     *
+     * Used when the user opts in for a NAS whose certificate does not match the address they
+     * connect to, which is the normal case when reaching a DiskStation by IP.
+     */
+    private fun HttpURLConnection.relaxTls() {
+        if (this !is HttpsURLConnection) return
+        sslSocketFactory = trustAllSocketFactory()
+        hostnameVerifier = HostnameVerifier { _, _ -> true }
+    }
+
+    private var cachedTrustAllFactory: SSLSocketFactory? = null
+
+    private fun trustAllSocketFactory(): SSLSocketFactory = cachedTrustAllFactory
+        ?: run {
+            val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            })
+            val factory = SSLContext.getInstance("TLS").apply {
+                init(null, trustAll, SecureRandom())
+            }.socketFactory
+            cachedTrustAllFactory = factory
+            factory
+        }
 }

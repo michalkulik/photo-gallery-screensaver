@@ -6,7 +6,9 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import com.michalkulik.photogallery.data.Photo
+import com.michalkulik.photogallery.util.Http
 import com.michalkulik.photogallery.util.Logs
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
@@ -57,14 +59,35 @@ object BitmapLoader {
     }
 
     private fun openStream(context: Context, photo: Photo): InputStream? = try {
-        if (photo.uri.startsWith("content:")) {
-            context.contentResolver.openInputStream(Uri.parse(photo.uri))
-        } else {
-            java.io.File(photo.uri).inputStream()
+        when {
+            photo.uri.startsWith("content:") ->
+                context.contentResolver.openInputStream(Uri.parse(photo.uri))
+
+            photo.uri.startsWith("http") ->
+                remoteFile(context, photo)?.inputStream()
+
+            else -> java.io.File(photo.uri).inputStream()
         }
     } catch (error: Exception) {
         Logs.w("Cannot open ${photo.uri}", error)
         null
+    }
+
+    /**
+     * Materialises a remote photo on disk, downloading it only once.
+     *
+     * The screensaver decodes each photo twice (once for the bounds, once for the pixels), and
+     * cycles back through the same list, so without this every appearance would re-download the
+     * image. The file name comes from [Photo.cacheKey] rather than the URL, because a Synology
+     * URL carries a session id that changes on every login.
+     */
+    private fun remoteFile(context: Context, photo: Photo): File? {
+        val name = photo.cacheKey ?: photo.uri.hashCode().toUInt().toString(16)
+        val target = File(File(context.cacheDir, REMOTE_DIR), name)
+        if (target.length() > 0) return target
+
+        val ok = Http.download(photo.uri, bearer = null, destination = target, insecure = photo.allowInsecureTls)
+        return if (ok && target.length() > 0) target else null
     }
 
     private fun decodeStream(stream: InputStream, options: BitmapFactory.Options): Bitmap? =
@@ -86,4 +109,7 @@ object BitmapLoader {
             null
         }
     }
+
+    /** Sub-directory of the app cache holding downloaded NAS photos. */
+    private const val REMOTE_DIR = "remote"
 }

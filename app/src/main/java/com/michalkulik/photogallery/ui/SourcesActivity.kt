@@ -35,6 +35,9 @@ class SourcesActivity : TvActivity() {
         TvUi.row(container, getString(R.string.sources_add_local)) {
             startActivity(Intent(this, LocalFolderActivity::class.java))
         }
+        TvUi.row(container, getString(R.string.sources_add_syno)) {
+            startActivity(Intent(this, SynoPhotosActivity::class.java))
+        }
         TvUi.row(container, getString(R.string.sources_add_google)) {
             startActivity(Intent(this, GooglePhotosActivity::class.java))
         }
