@@ -8,6 +8,7 @@ import com.michalkulik.photogallery.data.SourceKind
 import com.michalkulik.photogallery.syno.SynoAlbum
 import com.michalkulik.photogallery.syno.SynoAlbumCodec
 import com.michalkulik.photogallery.syno.SynoClient
+import com.michalkulik.photogallery.syno.SynoConfig
 import com.michalkulik.photogallery.syno.SynoException
 import com.michalkulik.photogallery.syno.SynoTwoFactorRequired
 import com.michalkulik.photogallery.util.Logs
@@ -75,11 +76,15 @@ class SynoPhotosActivity : TvActivity() {
             trailing = if (settings.synoSecure) CHECK else null,
             onClick = {
                 settings.synoSecure = !settings.synoSecure
-                // 5001 is the HTTPS port, 5000 the plain one; follow the toggle.
-                settings.synoPort = if (settings.synoSecure) {
-                    SynoConfig_HTTPS_PORT
-                } else {
-                    SynoConfig_HTTP_PORT
+                // Only swap between the two standard DSM ports. A custom port - a reverse proxy
+                // on 443, say - is a deliberate choice and must survive the toggle.
+                val known = setOf(SynoConfig.DEFAULT_PORT, SynoConfig.DEFAULT_PORT_PLAIN)
+                if (settings.synoPort in known) {
+                    settings.synoPort = if (settings.synoSecure) {
+                        SynoConfig.DEFAULT_PORT
+                    } else {
+                        SynoConfig.DEFAULT_PORT_PLAIN
+                    }
                 }
                 afterConfigChange()
             },
@@ -144,6 +149,12 @@ class SynoPhotosActivity : TvActivity() {
 
         // --- Albums ----------------------------------------------------------------------
         TvUi.section(container, getString(R.string.syno_albums))
+        TvUi.row(
+            container,
+            getString(R.string.syno_refresh_albums),
+            // Refreshing reuses the stored session, so it never asks for a code again.
+            subtitle = getString(R.string.syno_refresh_hint),
+        ) { refreshAlbums() }
         if (albums.isEmpty()) {
             // Without this the section simply would not appear and there would be nothing to
             // tell the user that connecting is what fills it.
@@ -182,6 +193,53 @@ class SynoPhotosActivity : TvActivity() {
                         graph.repository.setActive(source.id)
                         rebuild()
                     },
+                )
+            }
+        }
+    }
+
+    /**
+     * Re-reads the album list without signing in again.
+     *
+     * Albums are created and renamed on the NAS, so the list goes stale; this picks that up
+     * using the stored session or device token, which means no one-time code is needed.
+     */
+    private fun refreshAlbums() {
+        if (graph.settings.synoConfig() == null) {
+            Dialogs.message(this, getString(R.string.syno_title), getString(R.string.syno_incomplete))
+            return
+        }
+        val sheet = Sheet(this, getString(R.string.syno_refresh_albums))
+        sheet.setMessage(getString(R.string.syno_refreshing))
+        sheet.showIndeterminate()
+        sheet.show()
+        scope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) { graph.repository.synoAlbums() }
+                albums = list
+                graph.settings.synoAlbumsJson = SynoAlbumCodec.encode(list)
+                sheet.dismiss()
+                Dialogs.message(
+                    this@SynoPhotosActivity,
+                    getString(R.string.syno_refresh_albums),
+                    getString(R.string.syno_refreshed, list.size - 1),
+                )
+                rebuild()
+            } catch (needsCode: SynoTwoFactorRequired) {
+                sheet.dismiss()
+                // The stored device token is gone, so only a fresh sign-in can help.
+                Dialogs.message(
+                    this@SynoPhotosActivity,
+                    getString(R.string.syno_refresh_albums),
+                    getString(R.string.syno_refresh_needs_login),
+                )
+            } catch (error: Exception) {
+                sheet.dismiss()
+                Logs.e("Cannot refresh the Synology albums", error)
+                Dialogs.message(
+                    this@SynoPhotosActivity,
+                    getString(R.string.syno_refresh_albums),
+                    describeSynoError(error),
                 )
             }
         }
@@ -307,7 +365,3 @@ class SynoPhotosActivity : TvActivity() {
         const val CHECK = "\u2713"
     }
 }
-
-/** Default ports, kept next to the screen that switches between them. */
-private const val SynoConfig_HTTPS_PORT = 5001
-private const val SynoConfig_HTTP_PORT = 5000

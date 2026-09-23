@@ -181,6 +181,24 @@ class SynoParsersTest {
     }
 
     @Test
+    fun `omits the port when it is the default for the scheme`() {
+        // A reverse proxy on 443 is how a public address is reached, and "https://host:443" is
+        // needlessly ugly.
+        val public = SynoConfig(host = "synoscreensaver.mkulik.eu", port = 443, account = "a", password = "b")
+        assertEquals("https://synoscreensaver.mkulik.eu", public.baseUrl)
+
+        val plain = SynoConfig(host = "nas.local", port = 80, secure = false, account = "a", password = "b")
+        assertEquals("http://nas.local", plain.baseUrl)
+    }
+
+    @Test
+    fun `keeps a non-default port even when it is unusual`() {
+        val proxied = SynoConfig(host = "nas.example.com", port = 8443, account = "a", password = "b")
+
+        assertEquals("https://nas.example.com:8443", proxied.baseUrl)
+    }
+
+    @Test
     fun `strips a scheme the user pasted into the address field`() {
         val config = SynoConfig(host = "https://nas.local/", account = "a", password = "b")
 

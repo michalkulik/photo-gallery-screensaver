@@ -11,17 +11,22 @@ data class SynoConfig(
     val password: String,
     val ignoreCertificate: Boolean = false,
 ) {
-    /** `https://nas:5001` or `http://nas:5000`, without a trailing slash. */
+    /** `https://nas:5001`, or `https://nas.example.com` when the port is the default one. */
     val baseUrl: String
         get() {
             val scheme = if (secure) "https" else "http"
             val cleanHost = host.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
-            return "$scheme://$cleanHost:$port"
+            // A reverse proxy on the standard port is the common case for a public address, and
+            // "https://host:443" looks wrong even though it works.
+            val defaultPort = if (secure) HTTPS_PORT else HTTP_PORT
+            return if (port == defaultPort) "$scheme://$cleanHost" else "$scheme://$cleanHost:$port"
         }
 
     companion object {
         const val DEFAULT_PORT = 5001
         const val DEFAULT_PORT_PLAIN = 5000
+        const val HTTPS_PORT = 443
+        const val HTTP_PORT = 80
     }
 }
 

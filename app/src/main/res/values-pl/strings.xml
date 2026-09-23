@@ -21,6 +21,11 @@
     <string name="syno_connecting">Łączę się z serwerem\u2026</string>
     <string name="syno_connected">Zalogowano jako %1$s. Znaleziono albumy: %2$d.</string>
     <string name="syno_albums">Albumy na serwerze</string>
+    <string name="syno_refresh_albums">Odśwież listę albumów</string>
+    <string name="syno_refresh_hint">Bez kodu \u2014 używa zapisanej sesji</string>
+    <string name="syno_refreshing">Pobieram listę albumów z serwera\u2026</string>
+    <string name="syno_refreshed">Znaleziono albumy: %1$d.</string>
+    <string name="syno_refresh_needs_login">Serwer nie akceptuje już zapisanej sesji. Użyj opcji \u201ePołącz i pokaż albumy\u201d i podaj kod dwuetapowy.</string>
     <string name="syno_no_albums_yet">Brak po\u0142\u0105czenia. U\u017cyj opcji \u201ePo\u0142\u0105cz i poka\u017c albumy\u201d powy\u017cej, aby wczyta\u0107 list\u0119 album\u00f3w.</string>
     <string name="syno_all_photos">Wszystkie zdjęcia</string>
     <string name="syno_added">Dodano źródło: %1$s</string>
