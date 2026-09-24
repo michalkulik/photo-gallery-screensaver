@@ -87,23 +87,45 @@ object BitmapLoader {
     }
 
     /**
-     * A heavily reduced copy of [source], for the backdrop behind a fitted photo.
+     * A blurred, screen-filling copy of [source], for the backdrop behind a fitted photo.
      *
-     * It is deliberately tiny: the ImageView scales it up with bilinear filtering, which is what
-     * produces the soft look, and the GPU does that far more cheaply than blurring at full
-     * resolution would. Keeping only a few hundred pixels alive also means the backdrop costs
-     * almost no memory.
+     * The photo is scaled down first and the small copy is blurred. Blurring at full resolution
+     * would cost a visible pause, and because the result is scaled back up the difference is not
+     * visible - what matters is that the blur is real rather than implied by magnification, and
+     * that the copy stays large enough to keep the colour structure of the photo.
      */
-    fun backdrop(source: Bitmap): Bitmap? = runCatching {
-        val width = backdropWidth(source.width)
-        if (width >= source.width) return@runCatching null
+    fun backdrop(source: Bitmap, targetWidth: Int): Bitmap? = runCatching {
+        val width = backdropWidth(source.width, targetWidth)
         val height = (source.height.toFloat() * width / source.width).toInt().coerceAtLeast(1)
-        Bitmap.createScaledBitmap(source, width, height, true)
+
+        val scaled = if (width >= source.width) {
+            source.copy(Bitmap.Config.ARGB_8888, false) ?: return@runCatching null
+        } else {
+            Bitmap.createScaledBitmap(source, width, height, true)
+        }
+        if (scaled !== source && scaled.isRecycled) return@runCatching null
+
+        val pixels = IntArray(width * height)
+        scaled.getPixels(pixels, 0, width, 0, 0, width, height)
+        val blurred = Blur.apply(pixels, width, height, radius = blurRadius(width))
+        val result = Bitmap.createBitmap(blurred, width, height, Bitmap.Config.ARGB_8888)
+        if (scaled !== source) scaled.recycle()
+        result
     }.onFailure { Logs.w("Cannot build the backdrop", it) }.getOrNull()
 
-    /** Width of the backdrop copy; a pure function so the sizing can be tested. */
-    internal fun backdropWidth(sourceWidth: Int): Int =
-        if (sourceWidth <= BACKDROP_WIDTH) sourceWidth else BACKDROP_WIDTH
+    /**
+     * Width of the blurred copy: a quarter of the screen, never wider than the source.
+     *
+     * A pure function so the sizing can be tested without decoding an image.
+     */
+    internal fun backdropWidth(sourceWidth: Int, targetWidth: Int): Int {
+        val wanted = (targetWidth / BACKDROP_DIVISOR).coerceAtLeast(MIN_BACKDROP_WIDTH)
+        return minOf(sourceWidth, wanted).coerceAtLeast(1)
+    }
+
+    /** Blur radius in the copy's own pixels, scaled with its width so the softness is constant. */
+    internal fun blurRadius(backdropWidth: Int): Int =
+        (backdropWidth / BACKDROP_RADIUS_DIVISOR).coerceIn(2, Blur.MAX_RADIUS)
 
     private fun openStream(context: Context, photo: Photo): InputStream? = try {
         when {
@@ -295,10 +317,17 @@ object BitmapLoader {
     private const val CACHE_LIMIT_BYTES = 512L * 1024 * 1024
 
     /**
-     * Width of the backdrop copy.
+     * Width of the backdrop copy, as a fraction of the screen.
      *
-     * Small enough that scaling it up reads as a soft blur rather than a mosaic, large enough
-     * that it does not band. At 64 px a 1920 px screen magnifies it thirty times.
+     * A quarter of the screen: small enough that the blur is cheap, large enough that the photo's
+     * shapes survive. A much smaller copy reads as a mosaic once magnified, which looks like a
+     * fault rather than a backdrop.
      */
-    private const val BACKDROP_WIDTH = 64
+    private const val BACKDROP_DIVISOR = 4
+
+    /** Never go below this, so a small screen still gets a usable backdrop. */
+    private const val MIN_BACKDROP_WIDTH = 64
+
+    /** Blur radius relative to the copy's width; smaller means sharper. */
+    private const val BACKDROP_RADIUS_DIVISOR = 14
 }

@@ -1,6 +1,7 @@
 package com.michalkulik.photogallery.dream
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Covers the downsampling maths that keeps decoded photos within the screen budget. */
@@ -25,17 +26,25 @@ class BitmapLoaderTest {
     }
 
     @Test
-    fun `backdrop width is capped so the copy stays tiny`() {
-        // The backdrop is scaled up by the GPU, which is what makes it look blurred. Keeping it
-        // a few dozen pixels wide is what keeps that free.
-        assertEquals(64, BitmapLoader.backdropWidth(1920))
-        assertEquals(64, BitmapLoader.backdropWidth(4000))
+    fun `backdrop is a quarter of the screen wide`() {
+        // Large enough that the photo's shapes survive the blur; a tiny copy reads as a mosaic
+        // once magnified.
+        assertEquals(480, BitmapLoader.backdropWidth(sourceWidth = 4000, targetWidth = 1920))
+        assertEquals(960, BitmapLoader.backdropWidth(sourceWidth = 4000, targetWidth = 3840))
     }
 
     @Test
     fun `backdrop width never upscales a small source`() {
-        // Scaling a 20 px image up to 64 would cost memory and blur it for nothing.
-        assertEquals(20, BitmapLoader.backdropWidth(20))
-        assertEquals(64, BitmapLoader.backdropWidth(64))
+        // Scaling a 20 px image up would cost memory and blur it for nothing.
+        assertEquals(20, BitmapLoader.backdropWidth(sourceWidth = 20, targetWidth = 1920))
+        assertEquals(300, BitmapLoader.backdropWidth(sourceWidth = 300, targetWidth = 1920))
+    }
+
+    @Test
+    fun `blur radius grows with the copy but stays bounded`() {
+        // A constant radius would leave a wide copy barely blurred and a narrow one washed out.
+        assertTrue(BitmapLoader.blurRadius(480) > BitmapLoader.blurRadius(120))
+        assertEquals(2, BitmapLoader.blurRadius(1))
+        assertEquals(Blur.MAX_RADIUS, BitmapLoader.blurRadius(10_000))
     }
 }

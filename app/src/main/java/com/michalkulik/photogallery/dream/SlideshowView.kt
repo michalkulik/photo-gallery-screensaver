@@ -253,7 +253,7 @@ class SlideshowView @JvmOverloads constructor(
      */
     private fun loadFrame(photo: Photo): Frame? {
         val bitmap = BitmapLoader.load(context, photo, targetWidth(), targetHeight()) ?: return null
-        return Frame(bitmap, BitmapLoader.backdrop(bitmap))
+        return Frame(bitmap, BitmapLoader.backdrop(bitmap, targetWidth()))
     }
 
     private fun targetWidth(): Int = if (width > 0) width else FALLBACK_WIDTH
