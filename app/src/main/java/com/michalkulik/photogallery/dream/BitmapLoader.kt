@@ -328,6 +328,14 @@ object BitmapLoader {
     /** Never go below this, so a small screen still gets a usable backdrop. */
     private const val MIN_BACKDROP_WIDTH = 64
 
-    /** Blur radius relative to the copy's width; smaller means sharper. */
-    private const val BACKDROP_RADIUS_DIVISOR = 14
+    /**
+     * Blur radius relative to the copy's width.
+     *
+     * The visible spread is roughly `radius * passes * upscale`, so this divisor has to be read
+     * against the copy being a quarter of the screen and the blur running three passes. At 1/14
+     * the spread came to about 400 px on a 1920 screen - a fifth of the width - which left the
+     * backdrop a flat vertical gradient with no trace of the photo. This keeps the photo's
+     * shapes while still reading as a deliberate blur.
+     */
+    private const val BACKDROP_RADIUS_DIVISOR = 80
 }

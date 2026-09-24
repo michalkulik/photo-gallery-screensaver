@@ -72,6 +72,15 @@ class SlideshowView @JvmOverloads constructor(
      */
     private var activeAnimator: Animator? = null
 
+    /**
+     * The fade that removes the previous photo from the screen.
+     *
+     * Tracked separately from [activeAnimator] because it finishes long before the animation set
+     * it belongs to: the set also carries the Ken Burns zoom, which lasts a whole interval. Once
+     * the fade is over the previous photo must be gone, while the zoom has to keep running.
+     */
+    private var activeFadeOut: Animator? = null
+
     private val clockHandler = Handler(Looper.getMainLooper())
     private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val clockTick = object : Runnable {
@@ -214,6 +223,7 @@ class SlideshowView @JvmOverloads constructor(
         stopClock()
         val running = activeAnimator
         activeAnimator = null
+        activeFadeOut = null
         running?.removeAllListeners()
         running?.cancel()
         layerA.animate().cancel()
@@ -267,6 +277,9 @@ class SlideshowView @JvmOverloads constructor(
         // first - which is exactly what used to break every other transition.
         val previous = activeAnimator
         activeAnimator = null
+        // Cleared before the cancel, so the fade's own listener sees that it was cancelled and
+        // does not free a layer the new photo is about to take over.
+        activeFadeOut = null
         previous?.removeAllListeners()
         previous?.cancel()
 
@@ -323,8 +336,24 @@ class SlideshowView @JvmOverloads constructor(
             .ofFloat(incoming, View.TRANSLATION_X, incoming.translationX, 0f)
             .setDuration(duration)
 
+        // The outgoing photo is faded out as the incoming one fades in. Leaving it alone was a
+        // visible fault: a photo of a different shape stayed fully opaque underneath, so a wide
+        // picture followed by a tall one left pieces of the wide one on both sides of the screen
+        // for the whole interval. That reads as a broken background, not as a transition.
+        val fadeOut = ObjectAnimator.ofFloat(outgoing, View.ALPHA, outgoing.alpha, 0f)
+            .setDuration(duration)
+        fadeOut.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                // A cancellation means the next photo already owns this layer; leave it alone.
+                if (animation !== activeFadeOut) return
+                activeFadeOut = null
+                recycleLayer(outgoing)
+            }
+        })
+        activeFadeOut = fadeOut
+
         val set = AnimatorSet()
-        set.playTogether(fade, slide)
+        set.playTogether(fade, slide, fadeOut)
 
         if (settings.kenBurns) {
             // Played together with the fade rather than started afterwards: two separate
@@ -419,8 +448,14 @@ class SlideshowView @JvmOverloads constructor(
          */
         const val KEN_BURNS_SCALE_CONTAIN = 1.04f
 
-        /** Dims the blurred backdrop so the photo itself stays the subject. */
-        const val BACKDROP_ALPHA = 0.45f
+        /**
+         * Backdrop brightness.
+         *
+         * Measured on the television, 0.45 left the blurred copy spanning only levels 11-76 of
+         * 255, so the sides of a fitted photo were almost black and the backdrop read as noise
+         * rather than as a deliberate background.
+         */
+        const val BACKDROP_ALPHA = 0.6f
     }
 }
 
