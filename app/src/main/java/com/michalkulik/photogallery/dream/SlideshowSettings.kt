@@ -20,6 +20,9 @@ data class SlideshowSettings(
     // feet. The blurred backdrop keeps it from looking like a letterboxed film.
     val fit: FitMode = FitMode.CONTAIN,
     val showClock: Boolean = false,
+    // The temperature and its icon sit beside the clock, so it is off until asked for and is
+    // only usable together with it.
+    val showWeather: Boolean = false,
     val dim: Float = DEFAULT_DIM,
 ) {
     companion object {

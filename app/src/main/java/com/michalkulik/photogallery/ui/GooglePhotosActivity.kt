@@ -25,8 +25,6 @@ class GooglePhotosActivity : TvActivity() {
 
     override val screenTitle: String get() = getString(R.string.google_title)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
     override fun buildContent(container: LinearLayout) {
         val auth = graph.auth
 

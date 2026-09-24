@@ -27,4 +27,6 @@ class AppGraph(context: Context) {
     val picker: PickerClient = PickerClient(auth)
 
     val importer: GooglePhotosImporter = GooglePhotosImporter(auth, picker, cache)
+
+    val weather: WeatherService = WeatherService(settings)
 }

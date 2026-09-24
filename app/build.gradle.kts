@@ -35,8 +35,8 @@ android {
         applicationId = "com.michalkulik.photogallery"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 9
-        versionName = "1.3.2"
+        versionCode = 10
+        versionName = "1.4.0"
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "PICKER_API_BASE", "\"https://photospicker.googleapis.com/v1\"")
         // OAuth relay that performs the browser sign-in on the user's phone.
@@ -44,6 +44,15 @@ android {
         val relayBaseUrl = (findProperty("relay.baseUrl") as String?)
             ?: "https://screensaver.mkulik.eu"
         buildConfigField("String", "RELAY_BASE_URL", "\"$relayBaseUrl\"")
+
+        // OpenWeather key, so the weather works without any setup.
+        //
+        // This is a convenience default, not a secret: the source is public, so the key is
+        // public too and anyone can spend its quota. It can be replaced at run time from the
+        // slideshow settings, and built over with -PopenWeather.key=... for a private build.
+        val openWeatherKey = (findProperty("openWeather.key") as String?)
+            ?: "07af8dd914436ccc44eef5d8e24f3168"
+        buildConfigField("String", "OPEN_WEATHER_KEY", "\"$openWeatherKey\"")
     }
 
     signingConfigs {

@@ -106,7 +106,31 @@
     <string name="player_fit_contain">Fit whole photo</string>
     <string name="player_fit_cover">Fill the screen (crops edges)</string>
     <string name="player_clock">Show clock</string>
+    <string name="player_weather">Show weather</string>
+    <string name="player_weather_key">OpenWeather API key</string>
+    <string name="player_weather_key_hint">A free key from openweathermap.org. A built-in one works already; enter your own to replace it.</string>
+    <string name="player_weather_key_set">Own key</string>
+    <string name="player_weather_key_builtin">Built-in</string>
+    <string name="player_weather_key_missing">Not set</string>
+    <string name="player_weather_place">Weather location</string>
+    <string name="player_weather_auto">Detect automatically</string>
+    <string name="player_weather_auto_hint">Worked out from the internet address, accurate to a city.</string>
+    <string name="player_weather_set">Enter a place</string>
+    <string name="player_weather_searching">Searching\u2026</string>
+    <string name="player_weather_not_found">No place by that name was found.</string>
+    <string name="player_weather_failed">Could not read the weather. Check the internet connection.</string>
     <string name="player_dim">Dim photos</string>
+
+    <!-- Weather conditions; used as the accessibility name of the icon -->
+    <string name="weather_clear">Clear sky</string>
+    <string name="weather_few_clouds">Few clouds</string>
+    <string name="weather_scattered_clouds">Scattered clouds</string>
+    <string name="weather_overcast">Overcast</string>
+    <string name="weather_shower">Shower rain</string>
+    <string name="weather_rain">Rain</string>
+    <string name="weather_thunderstorm">Thunderstorm</string>
+    <string name="weather_snow">Snow</string>
+    <string name="weather_mist">Mist</string>
 
     <!-- Preview / dream -->
     <string name="preview_hint">Press BACK to stop the preview</string>

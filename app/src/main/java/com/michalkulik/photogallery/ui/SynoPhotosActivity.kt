@@ -30,8 +30,6 @@ class SynoPhotosActivity : TvActivity() {
 
     override val screenTitle: String get() = getString(R.string.syno_title)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
     private var albums: List<SynoAlbum> = emptyList()
 
     override fun buildContent(container: LinearLayout) {

@@ -19,8 +19,6 @@ class SourcesActivity : TvActivity() {
 
     override val screenTitle: String get() = getString(R.string.sources_title)
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
     override fun buildContent(container: LinearLayout) {
         val sources = graph.repository.sources()
         val activeId = graph.repository.activeSource()?.id

@@ -106,7 +106,31 @@
     <string name="player_fit_contain">Całe zdjęcie</string>
     <string name="player_fit_cover">Wypełnij ekran (przycina brzegi)</string>
     <string name="player_clock">Pokaż zegar</string>
+    <string name="player_weather">Pokaż pogodę</string>
+    <string name="player_weather_key">Klucz API OpenWeather</string>
+    <string name="player_weather_key_hint">Darmowy klucz z openweathermap.org. Wbudowany klucz działa od razu; tu możesz wpisać własny.</string>
+    <string name="player_weather_key_set">Własny klucz</string>
+    <string name="player_weather_key_builtin">Wbudowany</string>
+    <string name="player_weather_key_missing">Nie ustawiono</string>
+    <string name="player_weather_place">Lokalizacja pogody</string>
+    <string name="player_weather_auto">Wykryj automatycznie</string>
+    <string name="player_weather_auto_hint">Ustalana po adresie internetowym, z dokładnością do miasta.</string>
+    <string name="player_weather_set">Podaj miejscowość</string>
+    <string name="player_weather_searching">Szukam\u2026</string>
+    <string name="player_weather_not_found">Nie znaleziono takiej miejscowości.</string>
+    <string name="player_weather_failed">Nie udało się pobrać pogody. Sprawdź połączenie z internetem.</string>
     <string name="player_dim">Przyciemnienie</string>
+
+    <!-- Weather conditions; used as the accessibility name of the icon -->
+    <string name="weather_clear">Bezchmurnie</string>
+    <string name="weather_few_clouds">Małe zachmurzenie</string>
+    <string name="weather_scattered_clouds">Zachmurzenie umiarkowane</string>
+    <string name="weather_overcast">Zachmurzenie duże</string>
+    <string name="weather_shower">Przelotny deszcz</string>
+    <string name="weather_rain">Deszcz</string>
+    <string name="weather_thunderstorm">Burza</string>
+    <string name="weather_snow">Śnieg</string>
+    <string name="weather_mist">Mgła</string>
 
     <!-- Preview / dream -->
     <string name="preview_hint">Naciśnij WSTECZ, aby zakończyć podgląd</string>

@@ -16,10 +16,15 @@ import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import com.michalkulik.photogallery.R
 import com.michalkulik.photogallery.data.Photo
 import com.michalkulik.photogallery.util.Logs
+import com.michalkulik.photogallery.weather.Weather
+import com.michalkulik.photogallery.weather.WeatherIconView
+import com.michalkulik.photogallery.weather.WeatherSource
+import com.michalkulik.photogallery.weather.labelRes
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,6 +54,16 @@ class SlideshowView @JvmOverloads constructor(
     private val layerA = ImageView(context)
     private val layerB = ImageView(context)
     private val dimView = View(context)
+
+    /**
+     * The clock, the temperature and the weather icon, in one row pinned to the top right.
+     *
+     * Held together so the temperature sits to the left of the time whatever the width of
+     * either: positioning two views independently would make them overlap at some temperatures.
+     */
+    private val statusRow = LinearLayout(context)
+    private val weatherIcon = WeatherIconView(context)
+    private val weatherTemp = TextView(context)
     private val clockView = TextView(context)
     private val messageView = TextView(context)
 
@@ -71,6 +86,14 @@ class SlideshowView @JvmOverloads constructor(
      * other transition.
      */
     private var activeAnimator: Animator? = null
+
+    /** Drives the refresh of the temperature; separate from [slideshowJob]. */
+    private var weatherJob: Job? = null
+
+    private var weatherSource: WeatherSource? = null
+
+    /** The reading on screen, or null when there is none to show. */
+    private var weather: Weather? = null
 
     /**
      * The fade that removes the previous photo from the screen.
@@ -115,8 +138,31 @@ class SlideshowView @JvmOverloads constructor(
         clockView.setTextColor(Color.WHITE)
         clockView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 40f)
         clockView.setShadowLayer(8f, 0f, 2f, Color.BLACK)
+
+        statusRow.orientation = LinearLayout.HORIZONTAL
+        statusRow.gravity = Gravity.CENTER_VERTICAL
+        statusRow.addView(
+            weatherIcon,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(10) },
+        )
+        weatherTemp.setTextColor(Color.WHITE)
+        // Slightly smaller than the time: the clock is the primary reading and the temperature
+        // is there to be noticed, not to compete with it.
+        weatherTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 34f)
+        weatherTemp.setShadowLayer(8f, 0f, 2f, Color.BLACK)
+        statusRow.addView(
+            weatherTemp,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(24) },
+        )
+        statusRow.addView(clockView)
         addView(
-            clockView,
+            statusRow,
             LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.TOP or Gravity.END
                 topMargin = dp(40)
@@ -148,11 +194,71 @@ class SlideshowView @JvmOverloads constructor(
         layerB.scaleType = scaleType
         clockView.visibility = if (value.showClock) View.VISIBLE else View.GONE
         if (value.showClock) startClock() else stopClock()
+        updateWeatherVisibility()
+        if (value.showWeather) startWeather() else stopWeather()
     }
 
     /** Replaces the playlist and restarts playback from the beginning. */
     fun setPhotos(photos: List<Photo>, order: PlayOrder) {
         playlist = PhotoOrder.arrange(photos, order, Random(System.nanoTime()))
+    }
+
+    /** Supplies the temperature shown beside the clock; without one nothing is shown. */
+    fun setWeatherSource(source: WeatherSource) {
+        weatherSource = source
+    }
+
+    /**
+     * Keeps the temperature up to date while photos are playing.
+     *
+     * On its own loop rather than tied to the slideshow, so a slow request never delays the next
+     * photo and the reading is refreshed on its own schedule however long the interval is.
+     */
+    private fun startWeather() {
+        stopWeather()
+        val source = weatherSource ?: return
+        weatherJob = scope.launch {
+            // Whatever was stored is shown at once, so the corner is not bare while the first
+            // request is in flight.
+            showWeather(source.cached())
+            while (isActive) {
+                val reading = withContext(Dispatchers.IO) {
+                    runCatching { source.current() }
+                        .onFailure { Logs.w("Cannot read the weather", it) }
+                        .getOrNull()
+                }
+                if (reading != null) showWeather(reading)
+                delay(WEATHER_REFRESH_MS)
+            }
+        }
+    }
+
+    private fun stopWeather() {
+        weatherJob?.cancel()
+        weatherJob = null
+    }
+
+    private fun showWeather(value: Weather?) {
+        weather = value
+        if (value != null) {
+            weatherTemp.text = value.display
+            weatherIcon.show(value.condition, value.isDay)
+            // Read out instead of leaving the icon as an unlabelled graphic.
+            weatherIcon.contentDescription = context.getString(value.condition.labelRes())
+        }
+        updateWeatherVisibility()
+    }
+
+    /**
+     * Shows the weather only once there is something to show.
+     *
+     * A placeholder such as `--` would look like a fault; an empty spot until the first reading
+     * arrives looks like the screen it is.
+     */
+    private fun updateWeatherVisibility() {
+        val visible = settings.showWeather && weather != null
+        weatherIcon.visibility = if (visible) View.VISIBLE else View.GONE
+        weatherTemp.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     /** Shows [message] instead of photos (used for the empty state). */
@@ -220,6 +326,7 @@ class SlideshowView @JvmOverloads constructor(
     fun stop() {
         slideshowJob?.cancel()
         slideshowJob = null
+        stopWeather()
         stopClock()
         val running = activeAnimator
         activeAnimator = null
@@ -316,7 +423,7 @@ class SlideshowView @JvmOverloads constructor(
         // The overlays belong above the photos, so raising a layer has to be followed by raising
         // them again.
         dimView.bringToFront()
-        clockView.bringToFront()
+        statusRow.bringToFront()
         messageView.bringToFront()
 
         // The incoming layer becomes the front immediately; the outgoing one is cleared once
@@ -439,6 +546,15 @@ class SlideshowView @JvmOverloads constructor(
         const val FALLBACK_WIDTH = 1920
         const val FALLBACK_HEIGHT = 1080
         const val KEN_BURNS_SCALE = 1.08f
+
+        /**
+         * How often the temperature is revisited.
+         *
+         * It is only asked of the network when the stored reading is older than the service's
+         * own limit, so this is how often that limit is checked rather than how often a request
+         * is made.
+         */
+        const val WEATHER_REFRESH_MS = 10 * 60 * 1000L
 
         /**
          * Zoom for the fitted mode.

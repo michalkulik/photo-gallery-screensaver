@@ -2,11 +2,13 @@ package com.michalkulik.photogallery.core
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.michalkulik.photogallery.BuildConfig
 import com.michalkulik.photogallery.dream.FitMode
 import com.michalkulik.photogallery.dream.PlayOrder
 import com.michalkulik.photogallery.dream.SlideshowSettings
 import com.michalkulik.photogallery.dream.Transition
 import com.michalkulik.photogallery.syno.SynoConfig
+import com.michalkulik.photogallery.weather.Place
 
 /**
  * Single place that owns every persisted value: the slideshow settings, the list of photo
@@ -56,8 +58,94 @@ class Settings(context: Context) {
         kenBurns = kenBurns,
         fit = fit,
         showClock = showClock,
+        showWeather = showWeather,
         dim = dim,
     )
+
+    // --- Weather ---------------------------------------------------------------------------
+
+    /** Whether the temperature is shown beside the clock. Off until asked for. */
+    var showWeather: Boolean
+        get() = prefs.getBoolean(KEY_WEATHER_SHOWN, false)
+        set(value) = prefs.edit().putBoolean(KEY_WEATHER_SHOWN, value).apply()
+
+    /**
+     * The OpenWeather key.
+     *
+     * Falls back to the one compiled into the build, so the weather works without any setup.
+     * A value entered here replaces it, which is the way to use a private key: the built-in one
+     * is in a public repository, so it is not a secret.
+     */
+    var weatherApiKey: String?
+        get() = prefs.getString(KEY_WEATHER_KEY, null)?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.OPEN_WEATHER_KEY.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_WEATHER_KEY, value?.trim()).apply()
+
+    /** Whether the key in use was entered here rather than compiled in. */
+    fun hasOwnWeatherKey(): Boolean =
+        prefs.getString(KEY_WEATHER_KEY, null)?.isNotBlank() == true
+
+    /**
+     * Whether the location is worked out from the public address.
+     *
+     * The default because it needs no input, and a television has no other automatic source.
+     * Turning it off makes [weatherLatitude] and [weatherLongitude] authoritative.
+     */
+    var weatherAutoLocation: Boolean
+        get() = prefs.getBoolean(KEY_WEATHER_AUTO, true)
+        set(value) = prefs.edit().putBoolean(KEY_WEATHER_AUTO, value).apply()
+
+    var weatherPlaceName: String?
+        get() = prefs.getString(KEY_WEATHER_PLACE, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_WEATHER_PLACE, value).apply()
+
+    /** Latitude, or null when no location is known yet. */
+    var weatherLatitude: Double?
+        get() = prefs.getFloat(KEY_WEATHER_LAT, Float.NaN).takeIf { !it.isNaN() }?.toDouble()
+        set(value) = prefs.edit().putFloat(KEY_WEATHER_LAT, value?.toFloat() ?: Float.NaN).apply()
+
+    var weatherLongitude: Double?
+        get() = prefs.getFloat(KEY_WEATHER_LON, Float.NaN).takeIf { !it.isNaN() }?.toDouble()
+        set(value) = prefs.edit().putFloat(KEY_WEATHER_LON, value?.toFloat() ?: Float.NaN).apply()
+
+    /** When the location was last resolved; an address-derived one is reused for a day. */
+    var weatherLocationTime: Long
+        get() = prefs.getLong(KEY_WEATHER_PLACE_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_WEATHER_PLACE_TIME, value).apply()
+
+    /**
+     * The last reading, kept so the first photo after a restart is not bare.
+     *
+     * The screensaver starts on a timer and may have a moment without a network; showing the
+     * reading from twenty minutes ago is better than showing nothing at all.
+     */
+    var weatherTemperature: Double?
+        get() = prefs.getFloat(KEY_WEATHER_TEMP, Float.NaN).takeIf { !it.isNaN() }?.toDouble()
+        set(value) = prefs.edit().putFloat(KEY_WEATHER_TEMP, value?.toFloat() ?: Float.NaN).apply()
+
+    var weatherConditionName: String?
+        get() = prefs.getString(KEY_WEATHER_CONDITION, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_WEATHER_CONDITION, value).apply()
+
+    var weatherIsDay: Boolean
+        get() = prefs.getBoolean(KEY_WEATHER_IS_DAY, true)
+        set(value) = prefs.edit().putBoolean(KEY_WEATHER_IS_DAY, value).apply()
+
+    /** When the reading was taken, used to decide whether it needs refreshing. */
+    var weatherFetchedAt: Long
+        get() = prefs.getLong(KEY_WEATHER_FETCHED, 0L)
+        set(value) = prefs.edit().putLong(KEY_WEATHER_FETCHED, value).apply()
+
+    /** Sets the location by hand, which also turns the automatic lookup off. */
+    fun setManualLocation(place: Place) {
+        prefs.edit()
+            .putBoolean(KEY_WEATHER_AUTO, false)
+            .putString(KEY_WEATHER_PLACE, place.label)
+            .putFloat(KEY_WEATHER_LAT, place.latitude.toFloat())
+            .putFloat(KEY_WEATHER_LON, place.longitude.toFloat())
+            .putLong(KEY_WEATHER_PLACE_TIME, System.currentTimeMillis())
+            .apply()
+    }
 
     // --- Sources ---------------------------------------------------------------------------
 
@@ -206,5 +294,17 @@ class Settings(context: Context) {
         const val KEY_SYNO_ALBUMS = "syno_albums_json"
         const val KEY_REFRESH_TOKEN = "google_refresh_token"
         const val KEY_TOKEN_EXPIRY = "google_token_expiry"
+
+        const val KEY_WEATHER_SHOWN = "weather_shown"
+        const val KEY_WEATHER_KEY = "weather_api_key"
+        const val KEY_WEATHER_AUTO = "weather_auto_location"
+        const val KEY_WEATHER_PLACE = "weather_place"
+        const val KEY_WEATHER_LAT = "weather_latitude"
+        const val KEY_WEATHER_LON = "weather_longitude"
+        const val KEY_WEATHER_PLACE_TIME = "weather_place_time"
+        const val KEY_WEATHER_TEMP = "weather_temperature"
+        const val KEY_WEATHER_CONDITION = "weather_condition"
+        const val KEY_WEATHER_IS_DAY = "weather_is_day"
+        const val KEY_WEATHER_FETCHED = "weather_fetched_at"
     }
 }

@@ -4,6 +4,10 @@ import android.app.Activity
 import android.os.Bundle
 import android.widget.LinearLayout
 import com.michalkulik.photogallery.App
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 /**
  * Base class for every TV screen: builds the scrollable shell, exposes [rebuild] so list screens
@@ -14,6 +18,14 @@ abstract class TvActivity : Activity() {
     protected lateinit var screen: TvUi.Screen
 
     protected val graph get() = App.graph
+
+    /**
+     * For work that outlives a single click, such as a network request.
+     *
+     * Cancelled with the activity, so a reply that arrives after the screen is gone is dropped
+     * rather than touching views that no longer exist.
+     */
+    protected val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     protected abstract val screenTitle: String
 
@@ -29,6 +41,11 @@ abstract class TvActivity : Activity() {
     override fun onResume() {
         super.onResume()
         rebuild()
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 
     /** Clears and rebuilds the content area. */
