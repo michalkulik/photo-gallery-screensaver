@@ -51,6 +51,11 @@ class PhotoRepository(
     }
 
     fun setActive(sourceId: String?) {
+        if (settings.activeSourceId != sourceId) {
+            // The record of what has been shown belongs to the previous source; its ids mean
+            // nothing in another one, and keeping them would suppress photos for no reason.
+            settings.playedPhotoIds = emptySet()
+        }
         settings.activeSourceId = sourceId
     }
 

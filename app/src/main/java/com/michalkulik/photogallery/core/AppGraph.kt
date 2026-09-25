@@ -29,4 +29,6 @@ class AppGraph(context: Context) {
     val importer: GooglePhotosImporter = GooglePhotosImporter(auth, picker, cache)
 
     val weather: WeatherService = WeatherService(settings)
+
+    val playbackHistory: StoredPlaybackHistory = StoredPlaybackHistory(settings)
 }

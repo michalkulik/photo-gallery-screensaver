@@ -92,6 +92,9 @@ class SlideshowView @JvmOverloads constructor(
 
     private var weatherSource: WeatherSource? = null
 
+    /** Which photos have already been shown in the current pass; null when not provided. */
+    private var history: PlaybackHistory? = null
+
     /** The reading on screen, or null when there is none to show. */
     private var weather: Weather? = null
 
@@ -200,7 +203,35 @@ class SlideshowView @JvmOverloads constructor(
 
     /** Replaces the playlist and restarts playback from the beginning. */
     fun setPhotos(photos: List<Photo>, order: PlayOrder) {
-        playlist = PhotoOrder.arrange(photos, order, Random(System.nanoTime()))
+        // Photos already shown come last, so a restart continues the pass instead of beginning a
+        // fresh shuffle whose first photo may be one seen a moment ago.
+        val seen = if (order == PlayOrder.SHUFFLE) history?.seenIds().orEmpty() else emptySet()
+        playlist = PhotoOrder.arrange(photos, order, Random(System.nanoTime()), seen)
+        // A shuffle is a permutation, so any repeat here came from the source list itself: the
+        // NAS can list the same item twice, and a repeat in the playlist is what makes one photo
+        // appear again a few slides later instead of after a full pass.
+        val repeats = playlist.groupingBy { it.id }.eachCount().filterValues { it > 1 }
+        if (repeats.isEmpty()) {
+            Logs.d(
+                "Playlist of ${playlist.size} photos, all distinct " +
+                    "(${seen.size} already shown)",
+            )
+        } else {
+            Logs.w(
+                "Playlist of ${playlist.size} photos has ${repeats.size} repeated id(s): " +
+                    repeats.entries.take(5).joinToString { "${it.key} x${it.value}" },
+            )
+        }
+    }
+
+    /**
+     * Supplies the record of which photos have been shown.
+     *
+     * Optional: without one the slideshow still works, it simply reshuffles from scratch on
+     * every start, which is the behaviour a pass would have if the screensaver never restarted.
+     */
+    fun setPlaybackHistory(value: PlaybackHistory) {
+        history = value
     }
 
     /** Supplies the temperature shown beside the clock; without one nothing is shown. */
@@ -302,6 +333,8 @@ class SlideshowView @JvmOverloads constructor(
                         continue
                     }
                     failed = 0
+                    Logs.d("Playing ${index % playlist.size + 1}/${playlist.size}: id=${photo.id}")
+                    history?.markShown(photo.id)
                     show(frame, animate = firstShown)
                     firstShown = true
 

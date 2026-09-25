@@ -34,6 +34,7 @@ class PhotoDreamService : DreamService() {
         val view = slideshow ?: return
         val graph = App.graph
         view.setWeatherSource(graph.weather)
+        view.setPlaybackHistory(graph.playbackHistory)
         view.applySettings(graph.settings.slideshowSettings())
         scope.launch {
             val photos = withContext(Dispatchers.IO) {

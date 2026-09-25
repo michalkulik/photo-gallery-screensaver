@@ -62,6 +62,21 @@ class Settings(context: Context) {
         dim = dim,
     )
 
+    // --- Playback history -------------------------------------------------------------------
+
+    /**
+     * Ids of the photos already shown in the current pass.
+     *
+     * Persisted so that a start continues the pass rather than beginning a new shuffle: the
+     * screensaver restarts every time the screen wakes, and a fresh shuffle each time is what
+     * makes a photo reappear after only a few others.
+     *
+     * A copy is returned because the set from the preferences must not be modified in place.
+     */
+    var playedPhotoIds: Set<String>
+        get() = prefs.getStringSet(KEY_PLAYED_IDS, null)?.toSet().orEmpty()
+        set(value) = prefs.edit().putStringSet(KEY_PLAYED_IDS, value).apply()
+
     // --- Weather ---------------------------------------------------------------------------
 
     /** Whether the temperature is shown beside the clock. Off until asked for. */
@@ -277,6 +292,7 @@ class Settings(context: Context) {
         const val KEY_KEN_BURNS = "ken_burns"
         const val KEY_FIT = "fit"
         const val KEY_CLOCK = "show_clock"
+        const val KEY_PLAYED_IDS = "played_photo_ids"
         const val KEY_DIM = "dim"
 
         const val KEY_SOURCES = "sources_json"

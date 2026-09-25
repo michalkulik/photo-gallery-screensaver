@@ -53,6 +53,7 @@ class PreviewActivity : Activity() {
         setContentView(root)
 
         slideshow.setWeatherSource(graph.weather)
+        slideshow.setPlaybackHistory(graph.playbackHistory)
         slideshow.applySettings(graph.settings.slideshowSettings())
         scope.launch {
             val photos = withContext(Dispatchers.IO) {
